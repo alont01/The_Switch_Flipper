@@ -81,6 +81,12 @@ That width shapes the inside: the servo is about 23 mm wide and the XIAO about
 18 mm, so parts are stacked vertically, and the battery is a flat pouch cell
 (a round 18650 would push the box too far off the wall).
 
+The layout model in [hardware/layout](../hardware/layout) puts it all in a box
+**44 × 100 × 34.5 mm** whose front is 38 mm from the faceplate (46 mm to the
+handle). With an 803040 battery the box extends about 6 mm below a US single
+faceplate. See [layout_2d.svg](layout_2d.svg) and the renders in
+[images/](images).
+
 Layout, top to bottom: servo (with its capacitor and MOSFET on short wires) →
 carriage and reed switch → mic behind sound holes → XIAO with USB-C facing down
 → flat LiPo against the backplate. The XIAO's stick-on antenna goes on the

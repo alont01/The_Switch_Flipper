@@ -8,10 +8,15 @@ STLs to this folder, for example:
 
 ```
 hardware/
+  layout/     layout model (done)
   cad/        source files (Fusion, OpenSCAD, STEP)
   stl/        print-ready parts: box, backplate, carriage, finger
   photos/
 ```
+
+**[layout/](layout)** has the 3D layout model: where every part sits, with
+STEP/FreeCAD/STL exports, rendered views and 2D drawings. Use it as the
+reference when modelling the real printed parts.
 
 Design requirements are in [docs/design.md](../docs/design.md):
 

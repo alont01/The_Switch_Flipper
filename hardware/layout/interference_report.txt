@@ -1,0 +1,2 @@
+Overlapping solids (mm^3) with the switch UP. Wires and the wall/switch body are not checked.
+none

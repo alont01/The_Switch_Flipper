@@ -10,3 +10,7 @@ target/
 # OS / editor
 .DS_Store
 .vscode/
+
+# FreeCAD backups / Python cache
+*.FCBak
+__pycache__/
