@@ -1,11 +1,15 @@
 """Draws docs/breadboard.svg: where every part and jumper goes on a standard
 half-size+ breadboard (30 columns, rows a-j, two power rails each side).
 
-Run:  python3 docs/tools/make_breadboard.py
+Run:  python3 docs/tools/make_breadboard.py              -> breadboard.svg (with boost converter)
+      python3 docs/tools/make_breadboard.py --no-boost   -> breadboard_no_boost.svg
 """
 import os
+import sys
 
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "breadboard.svg")
+BOOST = "--no-boost" not in sys.argv
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
+                   "breadboard.svg" if BOOST else "breadboard_no_boost.svg")
 
 P = 20                       # hole pitch in px
 X0 = 80                      # x of column 1
@@ -140,7 +144,7 @@ text(676, TOP_P + 4, "+", 13, weight="bold", fill=RED)
 text(676, TOP_N + 4, "−", 13, weight="bold", fill="#2f62c9")
 text(676, BOT_P + 4, "+", 13, weight="bold", fill=RED)
 text(676, BOT_N + 4, "−", 13, weight="bold", fill="#2f62c9")
-text(370, 80, "Rails:  top + = 3.3 V,  top − = GND    ·    bottom + = 5 V for the servo,  bottom − = GND", 11, "middle", "bold", "#7a1d1d")
+text(370, 80, f"Rails:  top + = 3.3 V,  top − = GND    ·    bottom + = {'5 V' if BOOST else 'battery'} for the servo,  bottom − = GND", 11, "middle", "bold", "#7a1d1d")
 
 # ================================================================ XIAO (USB-C to the left)
 rect(104, 198, 256, 332, "#1f1f1f", "#000", 1, rx=6)
@@ -218,16 +222,21 @@ wire((105, 528), "B-2", BLACK)
 wire((130, 528), "T+1", RED, pts=[(130, 500), (34, 500), (34, TOP_P)])
 
 # boost converter (bottom centre)
-rect(330, 520, 500, 585, "#5b3a8a", "#3b2460", 1, rx=4)
-text(415, 566, "5 V boost converter", 11, "middle", "bold", "#fff")
-for x, n in ((350, "EN"), (390, "VIN"), (430, "GND"), (470, "VOUT")):
-    circ(x, 528, 3.5, "#d4af37")
-    text(x, 544, n, 8, "middle", fill="#fff")
-wire((350, 528), "i8", "#16a085", lift=-30, dash=True)
-wire((390, 528), "j16", "#e67e22", lift=8)
-wire((430, 528), "B-27", BLACK, lift=-10)
-wire((470, 528), "B+29", RED, lift=-14)
-text(330, 600, "EN: only if your module has one.", 10, fill="#555")
+if not BOOST:
+    wire("j16", "B+29", RED, lift=-16)         # battery + straight to the servo rail
+    text(330, 520, "No boost: battery + goes straight", 11, weight="bold", fill="#7a1d1d")
+    text(330, 535, "to the servo rail (j16 → bottom +).", 11, weight="bold", fill="#7a1d1d")
+else:
+    rect(330, 520, 500, 585, "#5b3a8a", "#3b2460", 1, rx=4)
+    text(415, 566, "5 V boost converter", 11, "middle", "bold", "#fff")
+    for x, n in ((350, "EN"), (390, "VIN"), (430, "GND"), (470, "VOUT")):
+        circ(x, 528, 3.5, "#d4af37")
+        text(x, 544, n, 8, "middle", fill="#fff")
+    wire((350, 528), "i8", "#16a085", lift=-30, dash=True)
+    wire((390, 528), "j16", "#e67e22", lift=8)
+    wire((430, 528), "B-27", BLACK, lift=-10)
+    wire((470, 528), "B+29", RED, lift=-14)
+    text(330, 600, "EN: only if your module has one.", 10, fill="#555")
 
 # battery (bottom right)
 rect(560, 605, 700, 660, "#c7ccd1", "#8f969c", 1.2, rx=8)
@@ -235,9 +244,13 @@ text(630, 630, "LiPo 3.7 V", 12, "middle", "bold", fill="#333")
 text(630, 646, "1000 mAh", 10, "middle", fill="#333")
 wire((560, 618), "f16", RED, pts=[(540, 618), (540, 500), (X(16) + 8, 480), (X(16) + 8, 300)])
 wire((560, 645), "B-19", BLACK, pts=[(520, 645), (520, 490), (X(19), 470)])
-text(400, 625, "Battery + also goes to the", 10, "middle", fill="#555")
-text(400, 639, "BAT+ pad under the XIAO", 10, "middle", fill="#555")
-wire("g16", (254, 316), RED, dash=True, lift=-12)
+if BOOST:
+    text(400, 625, "Battery + also goes to the", 10, "middle", fill="#555")
+    text(400, 639, "BAT+ pad under the XIAO", 10, "middle", fill="#555")
+    wire("g16", (254, 316), RED, dash=True, lift=-12)
+else:
+    text(400, 625, "XIAO runs from USB for now. The battery", 10, "middle", fill="#555")
+    text(400, 639, "only powers the servo; grounds are shared.", 10, "middle", fill="#555")
 text(232, 352, "", 9)
 
 # servo (right)
@@ -263,12 +276,12 @@ rows = [
     ("R1 220k", "h12 → h16 (battery +)"),
     ("R2 220k", "j12 → bottom − rail"),
     ("D4 (h7)", "servo orange"),
-    ("D5 (h8)", "MOSFET gate (h22) + boost EN"),
+    ("D5 (h8)", "MOSFET gate (h22)" + (" + boost EN" if BOOST else "")),
     ("R3 100k", "gate (j22) → GND"),
     ("MOSFET drain (i23)", "servo brown"),
     ("MOSFET source (j24)", "bottom − rail"),
-    ("Servo red", "bottom + rail (5 V)"),
-    ("Battery +", "col 16 → boost VIN, C1+, R1"),
+    ("Servo red", "bottom + rail (5 V)" if BOOST else "bottom + rail (battery)"),
+    ("Battery +", "col 16 → boost VIN, C1+, R1" if BOOST else "col 16 → C1+, R1, + rail"),
     ("Battery −", "bottom − rail"),
     ("C1 470µF", "col 16 (+) → − rail"),
     ("C2 470µF", "across bottom rails (col 20)"),
@@ -287,13 +300,19 @@ notes = [
     "• If your breadboard's rails have a break in the middle, bridge each one. Never join the 5 V servo rail to the XIAO's 5V pin.",
     "• No battery or boost yet? Skip them, C1 and R1, and run a wire from the XIAO 5V pin (a3) to the bottom + rail: the servo runs from USB.",
 ]
+if not BOOST:
+    notes = [
+        "• Capacitor stripe = minus. MOSFET: printed side facing you, legs are Gate, Drain, Source left to right.",
+        "• The servo runs straight from the battery (3.7-4.2 V): a bit weaker than on 5 V but fine for testing. Don't connect the XIAO's 5V pin to anything.",
+        "• No reed switch or LED yet? Leave them out. Plug the XIAO's USB-C into the computer to power and program it.",
+    ]
 for i, n in enumerate(notes):
     text(40, 712 + i * 18, n, 12)
 
 svg = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 780" width="1200" height="780"
      font-family="Helvetica, Arial, sans-serif">
 <rect width="1200" height="780" fill="#fff"/>
-<text x="40" y="40" font-size="22" font-weight="bold" fill="#222">The Switch Flipper: breadboard wiring</text>
+<text x="40" y="40" font-size="22" font-weight="bold" fill="#222">The Switch Flipper: breadboard wiring{"" if BOOST else " (battery, no boost converter)"}</text>
 <text x="40" y="62" font-size="13" fill="#666">Every part of the circuit on one breadboard. Holes are named column number + row letter (h8 = row h, column 8).</text>
 {chr(10).join(el)}
 </svg>
