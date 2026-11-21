@@ -1,0 +1,12 @@
+# Arduino / arduino-cli build output
+build/
+*.bin
+*.elf
+*.map
+
+# Rust (future firmware)
+target/
+
+# OS / editor
+.DS_Store
+.vscode/
