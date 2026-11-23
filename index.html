@@ -1,0 +1,1722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Switch Flipper Test Bench</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: instrument bench. Dark device viewport + audio timeline on the left, control rack on the right,
+     hardware (devices + wiring) and the event log underneath. */
+  :root{
+    --bg:#EEF1F4;
+    --surface:#E3E8EC;
+    --raised:#F6F8F9;
+    --line:#C4CCD3;
+    --ink:#1A2027;
+    --ink-soft:#5C6670;
+    --ink-faint:#8A939C;
+    --accent:#0E7C86;
+    --accent-soft:rgba(14,124,134,.16);
+    --ok:#1E8A5F;
+    --warn:#B9770E;
+    --hit:#D92B37;
+    --lamp:#E8A317;
+    --room:#0B0F12;
+    --room-ink:#C9D3DA;
+    --font-display:'Barlow Condensed',system-ui,sans-serif;
+    --font-body:'IBM Plex Sans',system-ui,sans-serif;
+    --font-mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+    color-scheme:light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#14181C; --surface:#1C2226; --raised:#232A2F; --line:#333B42;
+      --ink:#E8EBEE; --ink-soft:#9AA4AC; --ink-faint:#6B747C;
+      --accent:#35C4D1; --accent-soft:rgba(53,196,209,.18);
+      --ok:#3FCB8F; --warn:#F0B44C; --hit:#FF4D58; --lamp:#FFC845;
+      --room:#07090B; --room-ink:#C9D3DA;
+      color-scheme:dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#14181C; --surface:#1C2226; --raised:#232A2F; --line:#333B42;
+    --ink:#E8EBEE; --ink-soft:#9AA4AC; --ink-faint:#6B747C;
+    --accent:#35C4D1; --accent-soft:rgba(53,196,209,.18);
+    --ok:#3FCB8F; --warn:#F0B44C; --hit:#FF4D58; --lamp:#FFC845;
+    --room:#07090B; --room-ink:#C9D3DA;
+    color-scheme:dark;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:14px;}
+  .sheet{max-width:1240px;margin:0 auto;padding:36px 20px 80px;display:flex;flex-direction:column;gap:18px;}
+
+  .tb-row{display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px 20px;font-family:var(--font-mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:14px;}
+  h1{font-family:var(--font-display);font-weight:700;font-size:clamp(30px,4.5vw,44px);letter-spacing:.01em;margin:0 0 8px;line-height:1.05;text-wrap:balance;}
+  h2{font-family:var(--font-display);font-weight:600;font-size:20px;margin:0 0 6px;letter-spacing:.01em;text-wrap:balance;}
+  .dek{font-size:15px;line-height:1.6;color:var(--ink-soft);max-width:760px;margin:0;}
+  p{line-height:1.6;}
+
+  .envnote{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);border-left:4px solid var(--warn);background:var(--raised);border-radius:6px;padding:10px 14px;font-size:13px;line-height:1.55;color:var(--ink-soft);}
+  .envnote b{color:var(--ink);}
+  .envnote code{font-family:var(--font-mono);font-size:12px;color:var(--ink);}
+  .envnote.ok{border-left-color:var(--ok);}
+
+  /* top strip */
+  .strip{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:flex-end;border:1px solid var(--line);border-radius:6px;background:var(--surface);padding:12px 16px;}
+  .strip .grp{display:flex;flex-direction:column;gap:6px;}
+  .lbl{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:5px;overflow:hidden;background:var(--bg);}
+  .seg button{font-family:var(--font-mono);font-size:11.5px;letter-spacing:.02em;padding:8px 12px;border:0;border-right:1px solid var(--line);background:transparent;color:var(--ink-soft);cursor:pointer;}
+  .seg button:last-child{border-right:0;}
+  .seg button[aria-pressed="true"]{background:var(--accent);color:var(--bg);}
+  .seg button:disabled{opacity:.4;cursor:not-allowed;}
+  .transport{display:flex;gap:8px;align-items:center;margin-left:auto;flex-wrap:wrap;}
+
+  .btn{font-family:var(--font-mono);font-size:11px;letter-spacing:.03em;text-transform:uppercase;padding:8px 11px;border-radius:4px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer;white-space:nowrap;}
+  .btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent);}
+  .btn.primary{background:var(--accent);color:var(--bg);border-color:var(--accent);}
+  .btn.primary:hover:not(:disabled){color:var(--bg);opacity:.9;}
+  .btn.danger{border-color:var(--hit);color:var(--hit);}
+  .btn:disabled{opacity:.45;cursor:not-allowed;}
+  .btn-row{display:flex;gap:8px;flex-wrap:wrap;}
+  .btn-row .btn{flex:1;}
+  .btn:focus-visible,.seg button:focus-visible,input:focus-visible,select:focus-visible,.preset:focus-visible,.view-btns button:focus-visible,.dropzone:focus-visible,.devrow:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  .checkline{display:flex;gap:7px;align-items:center;font-size:12.5px;color:var(--ink);cursor:pointer;}
+  input[type="checkbox"]{accent-color:var(--accent);}
+
+  /* verdict tiles */
+  .verdict{display:grid;grid-template-columns:minmax(220px,2fr) repeat(5,minmax(110px,1fr));gap:10px;}
+  @media (max-width:980px){ .verdict{grid-template-columns:repeat(3,minmax(0,1fr));} .verdict .tile.main{grid-column:1/-1;} }
+  .tile{border:1px solid var(--line);border-radius:6px;background:var(--surface);padding:10px 12px;display:flex;flex-direction:column;gap:4px;min-width:0;}
+  .tile .k{font-family:var(--font-mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-faint);}
+  .tile .v{font-family:var(--font-display);font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.1;}
+  .tile.main .v{font-size:21px;text-wrap:balance;}
+  .tile .s{font-size:11.5px;color:var(--ink-soft);line-height:1.4;}
+  .tile.good{border-left:4px solid var(--ok);} .tile.bad{border-left:4px solid var(--warn);} .tile.idle{border-left:4px solid var(--ink-faint);}
+  .v.warn{color:var(--warn);} .v.ok{color:var(--ok);}
+
+  .bench{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:18px;align-items:start;}
+  @media (max-width:900px){ .bench{grid-template-columns:minmax(0,1fr);} }
+  .left{display:flex;flex-direction:column;gap:14px;min-width:0;}
+  .rack{display:flex;flex-direction:column;gap:14px;}
+
+  .panel{border:1px solid var(--line);border-radius:6px;background:var(--surface);padding:14px 16px;display:flex;flex-direction:column;gap:12px;min-width:0;}
+  .panel-title{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);display:flex;justify-content:space-between;gap:10px;align-items:center;}
+  .panel-title .chip{letter-spacing:.04em;}
+  .note{font-size:12px;line-height:1.5;color:var(--ink-soft);margin:0;}
+  .note code{font-family:var(--font-mono);font-size:11.5px;color:var(--ink);}
+
+  /* viewport */
+  .viewport{position:relative;background:var(--room);border:1px solid var(--line);border-radius:6px;overflow:hidden;height:clamp(300px,46vh,470px);touch-action:none;cursor:grab;}
+  .viewport:active{cursor:grabbing;}
+  .viewport canvas{display:block;width:100%;height:100%;}
+  .view-btns{position:absolute;left:10px;top:10px;display:flex;gap:6px;flex-wrap:wrap;}
+  .view-btns button,.view-btns label{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--room-ink);background:rgba(7,9,11,.72);border:1px solid #2C353C;border-radius:4px;padding:6px 9px;cursor:pointer;display:inline-flex;gap:6px;align-items:center;}
+  .view-btns button[aria-pressed="true"]{border-color:#35C4D1;color:#35C4D1;}
+  .tag{position:absolute;transform:translate(-50%,-150%);pointer-events:none;white-space:nowrap;font-family:var(--font-mono);font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--room-ink);background:rgba(7,9,11,.62);padding:2px 6px;border-radius:3px;}
+  .hud{position:absolute;left:10px;bottom:10px;right:10px;display:flex;flex-wrap:wrap;gap:6px;pointer-events:none;}
+  .hud span{font-family:var(--font-mono);font-size:11px;color:var(--room-ink);background:rgba(7,9,11,.74);border:1px solid #2C353C;border-radius:4px;padding:5px 8px;font-variant-numeric:tabular-nums;}
+  .hud span.on{border-color:#FF4D58;color:#FFB3B8;}
+  .hud .lamp{margin-left:auto;}
+  .hud .lamp.lit{border-color:#FFC845;color:#FFE29A;box-shadow:0 0 14px rgba(255,200,69,.35);}
+  .hint{position:absolute;right:10px;top:12px;font-family:var(--font-mono);font-size:10px;color:#7D8A93;pointer-events:none;}
+
+  /* timeline */
+  .tl-wrap{position:relative;}
+  #timeline{display:block;width:100%;height:330px;cursor:crosshair;touch-action:none;}
+  .tl-tip{position:absolute;pointer-events:none;font-family:var(--font-mono);font-size:11px;line-height:1.45;background:var(--ink);color:var(--bg);padding:6px 8px;border-radius:4px;white-space:nowrap;transform:translate(-50%,calc(-100% - 10px));}
+  .legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-family:var(--font-mono);font-size:11px;color:var(--ink-soft);}
+  .legend span{display:inline-flex;align-items:center;gap:6px;}
+  .sw{width:14px;height:3px;border-radius:2px;display:inline-block;}
+  .sw.box{height:10px;width:10px;}
+
+  /* rack controls */
+  .row{display:flex;flex-direction:column;gap:6px;}
+  .row label{font-family:var(--font-mono);font-size:11px;letter-spacing:.03em;text-transform:uppercase;color:var(--ink-soft);display:flex;justify-content:space-between;gap:8px;}
+  .row label span{color:var(--accent);font-weight:500;font-variant-numeric:tabular-nums;text-transform:none;}
+  .row .help{font-size:11.5px;color:var(--ink-faint);line-height:1.4;}
+  select{font-family:var(--font-mono);font-size:12px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:6px 8px;width:100%;}
+  input[type="range"]{-webkit-appearance:none;appearance:none;width:100%;height:4px;background:var(--line);border-radius:2px;outline-offset:6px;}
+  input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid var(--surface);box-shadow:0 0 0 1px var(--line);}
+  input[type="range"]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid var(--surface);box-shadow:0 0 0 1px var(--line);}
+  input[type="range"]:disabled{opacity:.4;}
+
+  .presets{display:flex;flex-direction:column;gap:4px;max-height:330px;overflow:auto;margin:0 -4px;padding:0 4px;}
+  .preset{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;align-items:center;text-align:left;border:1px solid transparent;border-radius:5px;background:transparent;padding:7px 8px;cursor:pointer;color:var(--ink);font-family:var(--font-body);}
+  .preset:hover{background:var(--raised);}
+  .preset[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);}
+  .preset .nm{font-size:13px;font-weight:500;}
+  .preset .ds{grid-column:1/2;font-size:11.5px;color:var(--ink-soft);}
+  .preset .pill{grid-row:1/3;grid-column:2;}
+
+  .pill{display:inline-block;text-align:center;padding:2px 7px;border-radius:3px;font-family:var(--font-mono);font-size:10px;letter-spacing:.05em;font-weight:500;text-transform:uppercase;white-space:nowrap;}
+  .pill.flip{background:var(--accent);color:var(--bg);}
+  .pill.quiet{color:var(--ink-soft);border:1px solid var(--line);}
+  .pill.on{background:var(--ok);color:var(--bg);}
+  .pill.off{color:var(--ink-soft);border:1px solid var(--line);}
+  .pill.warn{background:var(--warn);color:var(--bg);}
+  .pill.bad{background:var(--hit);color:var(--bg);}
+  .pill.sim{color:var(--accent);border:1px solid var(--accent);}
+  .chip{font-family:var(--font-mono);font-size:10px;padding:2px 6px;border-radius:3px;border:1px solid var(--line);color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;}
+  .chip.live{border-color:var(--ok);color:var(--ok);}
+  .chip.sim{border-color:var(--accent);color:var(--accent);}
+  .chip.off{color:var(--ink-faint);}
+
+  .dropzone{border:1.5px dashed var(--line);border-radius:6px;padding:16px 12px;text-align:center;color:var(--ink-soft);font-size:12.5px;line-height:1.5;cursor:pointer;background:var(--bg);}
+  .dropzone.drag{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);}
+  .dropzone b{color:var(--ink);}
+  .meter{height:6px;border-radius:3px;background:var(--line);overflow:hidden;}
+  .meter i{display:block;height:100%;width:0;background:var(--hit);}
+  .srcinfo{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-soft);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;}
+  .srcinfo b{color:var(--ink);font-weight:500;}
+
+  /* hardware */
+  .hw{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:14px;}
+  @media (max-width:980px){ .hw{grid-template-columns:minmax(0,1fr);} }
+  .devtable{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .devtable th{font-family:var(--font-mono);font-weight:500;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.05em;font-size:10px;text-align:left;padding:4px 6px;border-bottom:1px solid var(--line);}
+  .devtable td{padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  .devtable tr:last-child td{border-bottom:none;}
+  .devrow{cursor:pointer;}
+  .devrow:hover td,.devrow.hl td{background:var(--accent-soft);}
+  .devtable .pin{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-soft);}
+  .devtable .val{font-family:var(--font-mono);font-size:11.5px;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap;}
+  .devtable .nm{font-weight:500;}
+  .devtable .sub{display:block;font-size:11px;color:var(--ink-faint);font-weight:400;}
+  .wiring{overflow-x:auto;}
+  .wiring svg{display:block;width:100%;min-width:560px;height:auto;}
+  .wiring .box{fill:var(--raised);stroke:var(--line);stroke-width:1.5;}
+  .wiring .box.xiao{fill:var(--bg);stroke:var(--ink-soft);stroke-width:2;}
+  .wiring .t{fill:var(--ink);font-family:var(--font-body);font-size:12px;font-weight:600;}
+  .wiring .ts{fill:var(--ink-soft);font-family:var(--font-body);font-size:10.5px;}
+  .wiring .pn{fill:var(--ink-soft);font-family:var(--font-mono);font-size:10.5px;}
+  .wiring .pv{fill:var(--accent);font-family:var(--font-mono);font-size:10.5px;font-variant-numeric:tabular-nums;}
+  .wiring .w{fill:none;stroke:var(--ink-faint);stroke-width:2;stroke-linejoin:round;}
+  .wiring .w.pwr{stroke:var(--ink-faint);}
+  .wiring .w.on{stroke:var(--accent);stroke-width:3;stroke-dasharray:7 5;animation:flow .7s linear infinite;}
+  .wiring .w.pwr.on{stroke:var(--hit);}
+  .wiring .w.hl{stroke:var(--warn);stroke-width:3.5;}
+  .wiring g.dev{cursor:pointer;}
+  .wiring g.dev.hl .box{stroke:var(--warn);stroke-width:2.5;}
+  @keyframes flow{to{stroke-dashoffset:-24;}}
+
+  .log{font-family:var(--font-mono);font-size:11.5px;line-height:1.5;max-height:240px;overflow:auto;margin:0;padding:0;list-style:none;}
+  .log li{display:grid;grid-template-columns:64px minmax(0,1fr);gap:10px;padding:2px 0;border-bottom:1px dotted var(--line);}
+  .log li .tt{color:var(--ink-faint);font-variant-numeric:tabular-nums;text-align:right;}
+  .log li.future{opacity:.38;}
+  .log li.double{color:var(--accent);font-weight:500;}
+  .log li.reject,.log li.single{color:var(--warn);}
+  .log li.refused{color:var(--hit);}
+  .log li.sound{color:var(--ink-soft);}
+  .log li.tx,.log li.raw{color:var(--ink-faint);}
+
+  .notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:22px;margin-top:10px;}
+  .notes p,.notes li{margin:0;font-size:13.5px;max-width:62ch;line-height:1.6;}
+  .notes ol{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px;}
+  .notes code{font-family:var(--font-mono);font-size:12px;}
+
+  dialog{border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);max-width:min(860px,94vw);width:100%;padding:16px;}
+  dialog::backdrop{background:rgba(0,0,0,.45);}
+  dialog pre{max-height:60vh;overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:12px;font-family:var(--font-mono);font-size:11.5px;line-height:1.5;margin:10px 0;}
+
+  /* ---- simplified layout ---- */
+  .bar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 18px;align-items:center;border:1px solid var(--line);border-radius:6px;background:var(--surface);padding:12px 16px;}
+  .bar-src,.bar-play{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .bar-src select{width:auto;min-width:230px;font-size:13px;padding:8px 10px;}
+  .bar-play .play{min-width:96px;font-size:12px;padding:9px 14px;}
+  .bar-info{grid-column:1/-1;display:flex;gap:10px 14px;align-items:center;flex-wrap:wrap;font-family:var(--font-mono);font-size:11.5px;color:var(--ink-soft);}
+  .bar-info b{color:var(--ink);font-weight:500;}
+  .bar-info .meter{width:90px;display:inline-block;}
+  .bar-info .meter:not(.on){display:none;}
+  .status{color:var(--ink-faint);font-family:var(--font-body);font-size:12px;}
+  .btn.on{border-color:var(--hit);color:var(--hit);}
+  @media (max-width:760px){ .bar{grid-template-columns:minmax(0,1fr);} }
+
+  .result{display:flex;gap:16px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-left:5px solid var(--ink-faint);border-radius:6px;background:var(--surface);padding:12px 16px;}
+  .result.good{border-left-color:var(--accent);} .result.bad{border-left-color:var(--warn);}
+  .r-main{display:flex;flex-direction:column;gap:3px;min-width:0;}
+  .r-k{font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);}
+  .r-v{font-family:var(--font-display);font-size:26px;font-weight:600;line-height:1.1;text-wrap:balance;}
+  .r-why{font-size:13.5px;color:var(--ink-soft);line-height:1.5;max-width:80ch;}
+  .r-lamp{display:flex;flex-direction:column;align-items:center;gap:6px;font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);flex:none;}
+  .bulb{width:30px;height:30px;border-radius:50%;background:var(--line);border:2px solid var(--line);}
+  .r-lamp.lit .bulb{background:var(--lamp);border-color:var(--lamp);box-shadow:0 0 18px var(--lamp);}
+  .r-lamp.lit{color:var(--ink);}
+
+  .panel-title .legend{text-transform:none;letter-spacing:0;font-size:11px;}
+  .sw.dash{height:0;border-top:2px dashed;background:none !important;}
+  #timeline{height:300px;}
+
+  .duo{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:14px;align-items:start;}
+  @media (max-width:900px){ .duo{grid-template-columns:minmax(0,1fr);} }
+  .tbl-wrap{overflow-x:auto;}
+  .sounds{width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:12px;font-variant-numeric:tabular-nums;}
+  .sounds th{font-weight:500;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.05em;font-size:10px;text-align:right;padding:4px 6px;border-bottom:1px solid var(--line);white-space:nowrap;}
+  .sounds th:last-child,.sounds td:last-child{text-align:left;}
+  .sounds td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap;}
+  .sounds tbody tr{cursor:pointer;}
+  .sounds tbody tr:hover td{background:var(--accent-soft);}
+  .sounds tbody tr.now td{background:var(--accent-soft);}
+  .sounds tbody tr.future{opacity:.45;}
+  .sounds .num{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;font-size:10.5px;font-weight:600;color:var(--bg);}
+  .sounds td.bad{color:var(--warn);}
+  .sounds .empty td{text-align:left;color:var(--ink-faint);font-family:var(--font-body);cursor:default;}
+  .panel.sim .viewport{height:300px;}
+  .view-sel{display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden;}
+  .view-sel button{font-family:var(--font-mono);font-size:10px;letter-spacing:.04em;text-transform:uppercase;border:0;border-right:1px solid var(--line);background:var(--bg);color:var(--ink-soft);padding:4px 8px;cursor:pointer;}
+  .view-sel button:last-child{border-right:0;}
+  .view-sel button[aria-pressed="true"]{background:var(--accent);color:var(--bg);}
+  .view-sel button:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
+
+  details.fold{gap:0;}
+  details.fold summary{list-style:none;cursor:pointer;}
+  details.fold summary::-webkit-details-marker{display:none;}
+  details.fold summary .panel-title > span:first-child::before{content:'▸ ';color:var(--accent);}
+  details.fold[open] summary .panel-title > span:first-child::before{content:'▾ ';}
+  details.fold summary:focus-visible{outline:2px solid var(--accent);outline-offset:4px;border-radius:3px;}
+  .tune{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px 22px;margin-top:14px;}
+  .xiao{display:flex;flex-direction:column;gap:12px;margin-top:12px;}
+  .steps{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px;font-size:13px;line-height:1.55;color:var(--ink-soft);max-width:90ch;}
+  .steps code{font-family:var(--font-mono);font-size:11.5px;color:var(--ink);}
+  .dropveil{position:fixed;inset:12px;border:3px dashed var(--accent);border-radius:12px;background:var(--accent-soft);display:grid;place-items:center;font-family:var(--font-display);font-size:28px;color:var(--accent);pointer-events:none;z-index:10;}
+  [hidden]{display:none !important;}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);}
+  @media (prefers-reduced-motion: reduce){ *{transition:none !important;animation:none !important;} }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <header>
+    <div class="tb-row">
+      <span>The Switch Flipper · Bench</span>
+      <span>CompactAssemblyV1 · double-clap detector</span>
+    </div>
+    <h1>Switch Flipper Test Bench</h1>
+    <p class="dek">Pick or record a sound and press Play. The graph shows the shape of each sound against the clap rules, and what the switch did in response.</p>
+  </header>
+
+  <div class="bar" role="group" aria-label="Sound and playback">
+    <div class="bar-src">
+      <label class="lbl" for="presetSel">Sound</label>
+      <select id="presetSel"></select>
+      <button type="button" class="btn" id="upBtn">Upload file</button>
+      <button type="button" class="btn" id="recBtn">Record 6 s</button>
+      <button type="button" class="btn" id="liveBtn">Live mic</button>
+      <input type="file" id="fileIn" accept="audio/*,.wav,.mp3,.m4a,.ogg,.aac,.flac" class="sr">
+    </div>
+    <div class="bar-play">
+      <label class="checkline"><input type="checkbox" id="playOut" checked> Sound out loud</label>
+      <button type="button" class="btn" id="restartBtn">Restart</button>
+      <button type="button" class="btn primary play" id="playBtn">Play</button>
+    </div>
+    <div class="bar-info">
+      <span>Loaded: <b id="srcName">Double clap</b> · <span id="srcDur">6.0 s</span></span>
+      <span class="chip sim" id="runChip">simulation</span>
+      <span class="meter" aria-hidden="true"><i id="recMeter"></i></span>
+      <span class="status" id="status" role="status"></span>
+    </div>
+  </div>
+
+  <section class="result idle" id="result" aria-live="polite">
+    <div class="r-main">
+      <span class="r-k">Response</span>
+      <span class="r-v" id="rOut">–</span>
+      <span class="r-why" id="rWhy"></span>
+    </div>
+    <div class="r-lamp" id="rLamp"><span class="bulb" aria-hidden="true"></span><span id="rLampTxt">Light ON</span></div>
+  </section>
+
+  <div class="panel">
+    <div class="panel-title"><span id="tlTitle">Sound shape and response · 0–6 s</span><span class="legend">
+      <span><i class="sw" style="background:var(--accent)"></i>loudness</span>
+      <span><i class="sw dash" style="border-color:var(--hit)"></i>clap trigger</span>
+      <span><i class="sw dash" style="border-color:var(--ink-faint)"></i>background</span>
+    </span></div>
+    <div class="tl-wrap" id="tlWrap">
+      <canvas id="timeline" aria-label="Graph of the sound's waveform and loudness over six seconds, with each sound numbered, followed by the detector state, servo power and light state. Click to jump to a time."></canvas>
+      <div class="tl-tip" id="tlTip" hidden></div>
+    </div>
+  </div>
+
+  <div class="duo">
+    <div class="panel">
+      <div class="panel-title"><span>Sounds heard</span><span class="chip" id="sndCount">0</span></div>
+      <div class="tbl-wrap">
+        <table class="sounds">
+          <thead><tr><th>#</th><th>At</th><th>Peak</th><th title="How much louder it got in 5–10 ms">Rise</th><th title="Time until it dropped below a fifth of its peak">Length</th><th title="Time since the previous sound started">Gap</th><th>Result</th></tr></thead>
+          <tbody id="soundsBody"></tbody>
+        </table>
+      </div>
+      <p class="note" id="rules"></p>
+    </div>
+
+    <div class="panel sim">
+      <div class="panel-title"><span>Simulation</span><span class="view-sel">
+        <button type="button" id="vIso" aria-pressed="true">Iso</button><button type="button" id="vSide" aria-pressed="false">Side</button><button type="button" id="vFront" aria-pressed="false">Front</button>
+      </span></div>
+      <div class="viewport" id="viewport">
+        <canvas id="scene" aria-label="3D view of CompactAssemblyV1 on a wall switch. Drag to orbit, scroll to zoom."></canvas>
+        <div id="tags"></div>
+        <div class="hud"><span id="hServo">Servo parked</span><span id="hToggle">Toggle UP</span></div>
+      </div>
+      <div class="btn-row">
+        <button type="button" class="btn" id="mFlip">Flip now</button>
+        <button type="button" class="btn" id="mHand">Flip by hand</button>
+      </div>
+    </div>
+  </div>
+
+  <details class="panel fold" id="tuneFold">
+    <summary><span class="panel-title"><span>Tune the detector</span><span class="chip" id="tuneChip">firmware defaults</span></span></summary>
+    <div class="tune">
+      <div class="row"><label for="cABS_MIN">Minimum loudness <span id="cABS_MINVal"></span></label><input type="range" id="cABS_MIN" min="100" max="2500" step="25"></div>
+      <div class="row"><label for="cRATIO">Times louder than background <span id="cRATIOVal"></span></label><input type="range" id="cRATIO" min="2" max="12" step="0.5"></div>
+      <div class="row"><label for="cMAX_CLAP_MS">Longest clap <span id="cMAX_CLAP_MSVal"></span></label><input type="range" id="cMAX_CLAP_MS" min="50" max="400" step="10"></div>
+      <div class="row"><label for="cMIN_GAP_MS">Shortest gap between claps <span id="cMIN_GAP_MSVal"></span></label><input type="range" id="cMIN_GAP_MS" min="40" max="400" step="10"></div>
+      <div class="row"><label for="cMAX_GAP_MS">Longest gap between claps <span id="cMAX_GAP_MSVal"></span></label><input type="range" id="cMAX_GAP_MS" min="300" max="1500" step="25"></div>
+      <div class="row"><label for="cQUIET_AFTER_MS">Quiet needed after clap 2 <span id="cQUIET_AFTER_MSVal"></span></label><input type="range" id="cQUIET_AFTER_MS" min="100" max="800" step="25"></div>
+      <div class="row"><label for="gain">Mic gain (trimpot) <span id="gainVal">×1.00</span></label><input type="range" id="gain" min="-2" max="2" step="0.05" value="0"></div>
+      <div class="row"><label for="adc">ADC sampling</label><select id="adc"><option value="xiao" selected>MicroPython speed (~15 kS/s)</option><option value="full">Every audio sample</option></select></div>
+      <label class="checkline"><input type="checkbox" id="mUpOn" checked> Toggle up = light on</label>
+      <div class="btn-row"><button type="button" class="btn" id="cfgReset">Back to firmware defaults</button><button type="button" class="btn" id="cfgSend" hidden>Send to XIAO</button></div>
+    </div>
+  </details>
+
+  <details class="panel fold" id="xiaoFold">
+    <summary><span class="panel-title"><span>Run on the real XIAO</span><span class="chip off" id="xChip">not connected</span></span></summary>
+    <div class="xiao">
+      <ol class="steps">
+        <li>Open this page from your computer in Chrome or Edge (the claude.ai viewer blocks USB and the mic): save it as <code>bench/index.html</code>, run <code>python3 -m http.server</code> in that folder, open <code>localhost:8000</code>.</li>
+        <li>Put the bench program on the board: <code>mpremote cp -r firmware/lib :</code> then <code>mpremote cp firmware/tests/09_bench_link/09_bench_link.py :main.py</code>.</li>
+        <li>Press Connect. The graph then shows what the board's own mic hears. Play a sound out loud next to the box to test it.</li>
+      </ol>
+      <div class="btn-row">
+        <button type="button" class="btn primary" id="xConnect">Connect XIAO</button>
+        <button type="button" class="btn" id="xReset" disabled>Restart program</button>
+        <button type="button" class="btn" id="xScript">Show bench program</button>
+      </div>
+    </div>
+  </details>
+</div>
+
+<dialog id="scriptDlg" aria-labelledby="scriptDlgTitle">
+  <h2 id="scriptDlgTitle">XIAO bench program · 09_bench_link.py</h2>
+  <p class="note">Save as <code>firmware/tests/09_bench_link/09_bench_link.py</code>, then copy it to the board as <code>main.py</code>. It needs <code>firmware/lib</code> from the Python branch.</p>
+  <pre id="scriptPre"></pre>
+  <div class="btn-row"><button type="button" class="btn primary" id="scriptCopy">Copy to clipboard</button><button type="button" class="btn" id="scriptClose">Close</button></div>
+</dialog>
+<div class="dropveil" id="dropveil" hidden>Drop the audio file to load it</div>
+
+<script type="text/plain" id="benchScript">
+# Test 9: bench link for the browser test bench (bench/index.html)
+#
+# Runs the double-clap detector on the XIAO's own microphone and streams what
+# it hears to the test bench page over USB, one text line at a time. The page
+# can also send commands (flip, move the servo, change detector settings).
+#
+# Wiring: everything from tests 2-6 (servo D4, MOSFET/boost D5, mic D1,
+#         LED D8, reed D10, battery divider D2).
+# Install: copy firmware/lib to the board, then this file as main.py:
+#     mpremote cp -r firmware/lib :
+#     mpremote cp firmware/tests/09_bench_link/09_bench_link.py :main.py
+# Then close mpremote and press "Connect XIAO" on the bench page.
+#
+# Lines sent to the page (comma separated):
+#   HELLO,switch-flipper-bench,1
+#   L,<trigger>,<noise>,<state>,<loud1>,<loud2>,<loud3>,<loud4>   every 20 ms
+#   S,<servo deg or -1>,<power 0/1>,<reed closed 0/1>,<led 0/1>,<battery mV>
+#   D,<ms>                       double clap confirmed
+#   E,<text>                     detector messages and notes
+# Commands from the page (one per line):
+#   flip | up | down | park | angle <0-180> | mute <ms> | status
+#   stream 0|1 | set <NAME> <value>
+
+import sys
+import time
+import select
+from machine import Pin, ADC
+import pins
+from servo import Servo
+from clap import Mic, DoubleClapDetector
+
+# ---------- Settings (the page can change these with "set") ----------
+CFG = {
+    "PARK_ANGLE": 90,     # servo angle where the fork leaves the toggle free
+    "UP_ANGLE": 164,      # push the toggle up (park + 74 deg on CompactAssemblyV1)
+    "DOWN_ANGLE": 16,     # push the toggle down (park - 74 deg)
+    "PUSH_MS": 600,       # time to reach and hold the push angle
+    "RETURN_MS": 500,     # time to get back to park before power off
+    "UP_IS_ON": 1,        # 1 if toggle up = light on
+    "BATT_CHECK": 0,      # 1 = refuse moves below LOW_BATT_MV (keep 0 on USB)
+    "LOW_BATT_MV": 3600,
+}
+# -----------------------------------------------------------------------
+
+power = Pin(pins.SERVO_POWER, Pin.OUT, value=0)
+led = Pin(pins.LED, Pin.OUT, value=1)           # active low
+reed = Pin(pins.REED, Pin.IN, Pin.PULL_UP)       # 0 = closed
+batt = ADC(Pin(pins.BATTERY))
+batt.atten(ADC.ATTN_11DB)
+servo = Servo(pins.SERVO, 500, 2400)
+
+mic = Mic(pins.MIC)
+det = DoubleClapDetector(mic, verbose=True)
+det.log = lambda msg: print("E," + msg.strip())
+
+poll = select.poll()
+poll.register(sys.stdin, select.POLLIN)
+
+streaming = True
+actions = []          # [(due_ms, fn)] for the non-blocking flip sequence
+led_off_at = None
+last_status = None
+last_status_ms = 0
+
+
+def battery_mv():
+    try:
+        return batt.read_uv() * 2 // 1000     # divider halves the voltage
+    except AttributeError:
+        return (batt.read_u16() * 3300 // 65535) * 2
+
+
+def reed_closed():
+    return 1 if reed.value() == 0 else 0
+
+
+def send_status(force=False):
+    global last_status, last_status_ms
+    ang = servo.angle if servo.pwm is not None else -1
+    st = (ang, power.value(), reed_closed(), 1 - led.value())
+    now = time.ticks_ms()
+    if force or st != last_status or time.ticks_diff(now, last_status_ms) > 1000:
+        print("S,%d,%d,%d,%d,%d" % (st[0], st[1], st[2], st[3], battery_mv()))
+        last_status = st
+        last_status_ms = now
+
+
+def at(delay_ms, fn):
+    actions.append((time.ticks_add(time.ticks_ms(), delay_ms), fn))
+
+
+def power_on():
+    power.value(1)
+
+
+def power_off():
+    servo.detach()
+    power.value(0)
+
+
+def move(target):
+    """Power up, push to target, return to park, power off. Non-blocking."""
+    if actions:
+        print("E,busy: move already running")
+        return
+    if CFG["BATT_CHECK"] and battery_mv() < CFG["LOW_BATT_MV"]:
+        print("E,low battery (%d mV): move refused" % battery_mv())
+        return
+    det.mute_for(CFG["PUSH_MS"] + CFG["RETURN_MS"] + 600)
+    power_on()
+    at(50, lambda: servo.write(target))
+    at(50 + CFG["PUSH_MS"], lambda: servo.write(CFG["PARK_ANGLE"]))
+    at(50 + CFG["PUSH_MS"] + CFG["RETURN_MS"], power_off)
+
+
+def flip():
+    up_now = reed_closed() == 1          # magnet near = toggle up
+    target = CFG["DOWN_ANGLE"] if up_now else CFG["UP_ANGLE"]
+    print("E,flip: toggle is %s, pushing %s" % ("UP" if up_now else "DOWN",
+                                                "DOWN" if up_now else "UP"))
+    move(target)
+
+
+def handle(line):
+    global streaming
+    parts = line.split()
+    if not parts:
+        return
+    cmd = parts[0].lower()
+    try:
+        if cmd == "flip":
+            flip()
+        elif cmd == "up":
+            move(CFG["UP_ANGLE"])
+        elif cmd == "down":
+            move(CFG["DOWN_ANGLE"])
+        elif cmd == "park":
+            move(CFG["PARK_ANGLE"])
+        elif cmd == "angle":
+            power_on()
+            servo.write(int(parts[1]))
+        elif cmd == "release":
+            power_off()
+        elif cmd == "mute":
+            det.mute_for(int(parts[1]))
+        elif cmd == "stream":
+            streaming = parts[1] != "0"
+        elif cmd == "status":
+            send_status(force=True)
+        elif cmd == "set":
+            name, val = parts[1], float(parts[2])
+            if name in CFG:
+                CFG[name] = int(val)
+            elif hasattr(DoubleClapDetector, name):
+                setattr(det, name, val if name in ("RATIO", "CLAP_END") else int(val))
+            else:
+                print("E,unknown setting " + name)
+                return
+            print("E,set %s = %s" % (name, parts[2]))
+        else:
+            print("E,unknown command " + cmd)
+    except (IndexError, ValueError) as e:
+        print("E,bad command '%s': %s" % (line, e))
+
+
+print("HELLO,switch-flipper-bench,1")
+send_status(force=True)
+batch = []
+
+while True:
+    loud = mic.loudness()
+    if det.update(loud):
+        print("D,%d" % time.ticks_ms())
+        led.value(0)
+        led_off_at = time.ticks_add(time.ticks_ms(), 300)
+        flip()
+
+    if streaming:
+        batch.append(loud)
+        if len(batch) == 4:
+            trig = max(det.ABS_MIN, det.noise * det.RATIO)
+            print("L,%d,%d,%d,%d,%d,%d,%d" % (trig, det.noise, det.state,
+                                              batch[0], batch[1], batch[2], batch[3]))
+            batch = []
+
+    now = time.ticks_ms()
+    if actions:
+        due = [a for a in actions if time.ticks_diff(now, a[0]) >= 0]
+        for a in due:
+            actions.remove(a)
+            a[1]()
+    if led_off_at is not None and time.ticks_diff(now, led_off_at) >= 0:
+        led.value(1)
+        led_off_at = None
+
+    send_status()
+
+    if poll.poll(0):
+        handle(sys.stdin.readline().strip())
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+var MESH = {"Fork slider":{"v":"AADQQAAAYMEAADBBAADQQAAAOMEAADBBAABgwAAAOMEAADBBAABgwAAAYMEAADBBAADQQAAAOMEAAABBAADQQAAAYMEAAABBAABgwAAAYMEAAABBAABgwAAAOMEAAABBAADQQAAAOEEAADBBAADQQAAAYEEAADBBAABgwAAAYEEAADBBAABgwAAAOEEAADBBAADQQAAAYEEAAABBAADQQAAAOEEAAABBAABgwAAAOEEAAABBAABgwAAAYEEAAABBAADQQAAAYMEAAORBAADQQM3MzL8AAORBAADQQM3MzL9mZkZBAADQQM3MzD9mZkZBAADQQM3MzD8AAORBAADQQAAAYEEAAORBAADQQAAAYEEAAGBAAADQQAAAYMEAAGBAMzMTQc3MzL9mZkZBMzMTQc3MzD9mZkZBMzMTQc3MzL8AAORBMzMTQc3MzD8AAORBMzMTQQAAYEEAAORBMzMTQQAAYMEAAORBMzMTQQAAYEEAAGBAMzMTQQAAYMEAAGBA","i":"AQACAAAAAAACAAMABQAGAAQABAAGAAcAAgAHAAMAAwAHAAYAAQAEAAIAAgAEAAcACQAKAAgACAAKAAsADQAOAAwADAAOAA8ACwAOAAgACAAOAA0ACgAPAAsACwAPAA4AAAAQAAEAAQAQABIAAQASAAQABAASABcABAAXAAUAEAARABIAEgATABcAFwATAA0AFwANABYAFgANAAwAFAAVABMAEwAVAAgAEwAIAA0AFQAJAAgAGQATABgAGAATABIAEgARABgAGAARABoAGQAbABMAEwAbABQAFAAbABUAFQAbABwAGgARAB0AHQARABAAHwAXAB4AHgAXABYAEAAAAB0AHQAAAB8AHwAAAAUAHwAFABcAAwAGAAAAAAAGAAUAFQAcAAkACQAcAB4ACQAeAAwADAAeABYADwAKAAwADAAKAAkAGgAdABgAGAAdAB8AGAAfABkAGQAfAB4AGQAeABwAHAAbABkA"},"Horn arm":{"v":"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","i":"AQAvAAAAAAAvABgAAAAYABcAFwAYABkAFwAZABYAFgAZABoAFgAaABUAFQAaABsAFQAbABQAFAAbABwAFAAcABMAEwAcAB0AEwAdABIAEgAdAB4AEgAeABEAEQAeAB8AEQAfABAAEAAfACAAEAAgAA8ADwAgACEADwAhAA4ADgAhACIADgAiAA0ADQAiACMADQAjAAwADAAjACQADAAkAAsACwAkACUACwAlAAoACgAlACYACgAmAAkACQAmACcACQAnAAgACAAnACgACAAoAAcABwAoACkABwApAAYABgApACoABgAqAAUABQAqACsABQArAAQABAArACwABAAsAAMAAwAsAC0AAwAtAAIAAgAtAC4AAgAuAAEAAQAuAC8AMQAyADAAMAAyADMANAA1AD8APwA1ADYAPwA2ADcANwA4AD8APwA4ADkAPwA5ADoAPwA6ADMAMwA6ADsAMwA7ADwAPAA9ADMAMwA9AD4AMwA+ADAAQAA/ADIAMgA/ADMANAA/AEEAQQA/AEAAWwAxAHQAdAAxADAAdAAwAHMAcwAwAD4AcwA+AHIAcgA+AD0AcgA9AHEAcQA9ADwAcQA8AHAAcAA8ADsAcAA7AG8AbwA7ADoAbwA6ADkAbwA5AG4AbgA5ADgAbgA4AG0AbQA4ADcAbQA3AGwAbAA3ADYAbAA2AGsAawA2ADUAawA1AGoAagA1ADQAagA0AGkAaQA0AEEAaQBBAEIAaQBCAGgAaABCAEMAaABDAGcAZwBDAEQAZwBEAGYAZgBEAEUAZgBFAGUAZQBFAEYAZQBGAGQAZABGAEcAZABHAGMAYwBHAEgAYwBIAGIAYgBIAEkAYgBJAGEAYQBJAEoAYQBKAGAAYABKAEsAYABLAF8AXwBLAEwAXwBMAF4AXgBMAE0AXgBNAF0AXQBNAE4AXQBOAFwAXABOAE8AXABPAIAAgABPAFAAgABQAH8AfwBQAFEAfwBRAH4AfgBRAFIAfgBSAH0AfQBSAFMAfQBTAHwAfABTAFQAfABUAHsAewBUAFUAewBVAHoAegBVAFYAegBWAHkAeQBWAFcAeQBXAHgAeABXAFgAeABYAHcAdwBYAFkAdwBZAHYAdgBZAFoAdgBaAHUAdQBaAFsAdQBbAHQAgQCCAKQApACCAIMApACDAKMAowCDAIQAowCEAKIAogCEAIUAogCFAKEAoQCFAIYAoQCGAKAAoACGAIcAoACHAJ8AnwCHAIgAnwCIAJ4AngCIAIkAngCJAJ0AnQCJAIoAnQCKAJwAnACKAIsAnACLAJsAmwCLAIwAmwCMAJoAmgCMAI0AmgCNAJkAmQCNAI4AmQCOAJgAmACOAI8AmACPAJcAlwCPAJAAlwCQAJYAlgCQAJEAlgCRAJUAlQCRAJIAlQCSAJQAlACSAJMALwBAABgAGABAADIAGAAyABkAGQAyABoAGgAyABsAGwAyABwAHAAyAIEAHACBAB0AHQCBAB4AHgCBAKQAHgCkAKMALwAuAEAAQAAuAC0AQAAtACwAQAAsAJQAlAAsACsAlAArACoAKQCYACoAKgCYAJcAKgCXAJYAmAApAJkAmQApACgAmQAoAJoAmgAoACcAmgAnAJsAmwAnACYAmwAmACUAmwAlAJwAnAAlACQAnAAkAJ0AnQAkACMAnQAjAJ4AngAjACIAngAiACEAngAhAJ8AnwAhACAAnwAgAKAAoAAgAB8AoAAfAKEAoQAfAB4AoQAeAKIAogAeAKMAgQAyAMgAyAAyADEAyAAxAMcAxwAxAFsAxwBbAMYAxgBbAFoAxgBaAMUAxQBaAFkAxQBZAMQAxABZAMMAwwBZAFgAwwBYAMIAwgBYAMEAwQBYAMAAwABYAFcAwABXAL8AvwBXAL4AvgBXAFYAvgBWAL0AvQBWAFUAvQBVALwAvABVAFQAvABUALsAuwBUAFMAuwBTALoAugBTAFIAugBSALkAuQBSAFEAuQBRALgAuABRAFAAuABQALcAtwBQAE8AtwBPALYAtgBPAE4AtgBOAE0AtgBNALUAtQBNAEwAtQBMALQAtABMAEsAtABLALMAswBLAEoAswBKALIAsgBKAEkAsgBJALEAsQBJAEgAsQBIALAAsABIAEcAsABHAK8ArwBHAEYArwBGAK4ArgBGAK0ArQBGAEUArQBFAKwArABFAKsAqwBFAKoAqgBFAEQAqgBEAKkAqQBEAKgAqABEAEMAqABDAKcApwBDAEIApwBCAKYApgBCAEEApgBBAKUApQBBAEAApQBAAJQAlgCVACoAKgCVAJQAyQCCAMgAyACCAIEApQCUAMoAygCUAJMAyQDIAOwA7ADIAMcA7ADHAOsA6wDHAMYA6wDGAOoA6gDGAMUA6gDFAOkA6QDFAMQA6QDEAOgA6ADEAMMA6ADDAOcA5wDDAMIA5wDCAOYA5gDCAMEA5gDBAOUA5QDBAMAA5QDAAOQA5ADAAL8A5AC/AOMA4wC/AL4A4wC+AOIA4gC+AL0A4gC9AOEA4QC9ALwA4QC8AOAA4AC8ALsA4AC7AN8A3wC7ALoA3wC6AN4A3gC6ALkA3gC5AN0A3QC5ALgA3QC4ANwA3AC4ALcA3AC3ANsA2wC3ALYA2wC2ANoA2gC2ALUA2gC1ANkA2QC1ALQA2QC0ANgA2AC0ALMA2ACzANcA1wCzALIA1wCyANYA1gCyALEA1gCxANUA1QCxALAA1QCwANQA1ACwAK8A1ACvANMA0wCvAK4A0wCuANIA0gCuAK0A0gCtANEA0QCtAKwA0QCsANAA0ACsAKsA0ACrAM8AzwCrAKoAzwCqAM4AzgCqAKkAzgCpAM0AzQCpAKgAzQCoAMwAzACoAKcAzACnAMsAywCnAKYAywCmAMoAygCmAKUAFwBvAAAAAABvAG4AAABuAAEAAQBuAG0AAQBtAAIAAgBtAAMAAwBtAGwAAwBsAMoAygBsAGsAygBrAGoAbwAXAHAAcAAXABYAcAAWABUAFADJABUAFQDJAHEAFQBxAHAAyQAUAIIAggAUABMAggATABIAEQCGABIAEgCGAIUAEgCFAIQAhgARAIcAhwARABAAhwAQAIgAiAAQAA8AiAAPAIkAiQAPAA4AiQAOAA0AiQANAIoAigANAAwAigAMAIsAiwAMAAsAiwALAIwAjAALAAoAjAAKAAkAjAAJAI0AjQAJAAgAjQAIAI4AjgAIAAcAjgAHAI8AjwAHAAYAjwAGAJAAkAAGAJEAkQAGAJIAkgAGAJMAkwAGAAUAkwAFAAQAkwAEAMoAygAEAAMAgADcAFwAXADcANsAXADbAF0AXQDbANoAXQDaAF4AXgDaANkAXgDZAF8AXwDZANgAXwDYAGAAYADYANcAYADXAGEAYQDXANYAYQDWAGIAYgDWANUAYgDVAGMAYwDVANQAYwDUAGQAZADUANMAZADTAGUAZQDTANIAZQDSANEA3ACAAN0A3QCAAH8A3QB/AN4A3gB/AH4A3gB+AN8A3wB+AH0A3wB9AOAA4AB9AHwA4AB8AOEA4QB8AHsA4QB7AOIA4gB7AHoA4gB6AOMA4wB6AHkA4wB5AOQA5AB5AHgA5AB4AOUA5QB4AOYA5gB4AOcA5wB4AHcA5wB3AOgA6AB3AOkA6QB3AOoA6gB3AHYA6gB2AOsA6wB2AHUA6wB1AOwA7AB1AHQA7AB0AMkAyQB0AHMAyQBzAHIAcgBxAMkAagBpAMoAygBpAMsAywBpAGgAywBoAMwAzABoAGcAzABnAM0AzQBnAGYAzQBmAM4AzgBmAM8AzwBmANAA0ABmAGUA0ABlANEAhACDABIAEgCDAIIA"},"Housing":{"v":"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AAB4QdC3B0JSfcZAAAB4QcbFCEKpSrxAAAB4QRt6CULsULBAAAB4QXfJCUK5UKNAAAB4Qd+uCUIzG5ZAAAB4Qf8rCULThIlAAAB4QQ9JCEIhsHxAAAB4QVIUB0JckWpAAAB4QS+hBULI0F1AmpktQgAAoMAAAIRBmpktQgAAoEAAAIRBmpklQgAAoEAAAIRBmpklQgAAoMAAAIRBmpklQgAAoMAAANxBmpktQgAAoMAAANxBmpktQgAAoEAAANxBmpklQgAAoEAAANxBmpklQgAA0EEAANxBmpklQgAA0EGamZlAmpklQgAA0MGamZlAmpklQgAA0MEAANxBmpktQgAA9EEAANxBAACwQAAA9EEAANxBAACwQAAA5EEAANxBAABAQQAA5EEAANxBAABAQQAA0EEAANxBAABwQQAA0EEAANxBAABwQQAA5EEAANxBmpkZQgAA5EEAANxBmpkZQgAA0EEAANxBzcxkQTMzw8EzMzNAzcxkQTMzw8GamZlAZmaWQTMzw8GamZlAZmaWQTMzw8EzMzNAzcxkQc3MtMEzMzNAzcxkQc3MtMGamZlAZmaWQc3MtMEzMzNAZmaWQc3MtMGamZlAZmYWQQAA5MEzM1NAZmYWQQAA5EEzM1NAmpnJQAAA5EEzM1NAmpnJQAAA5MEzM1NAmpnJQAAA5EGamZlAmpnJQAAA5MGamZlAZmYWQQAA5MGamZlAZmYWQQAA5EGamZlAAABAQQAA5MGamZlAAABAQQAA1MGamZlAzcwsQQAA1MGamZlAzcwsQQAApMGamZlAZmauQQAApMGamZlAZmauQQAA1MGamZlAAABwQQAA1MGamZlAAABwQQAA5MGamZlAmpkZQgAA5MGamZlAmpkZQgAA0MGamZlAmpkZQgAA0EGamZlAmpkZQgAA5EGamZlAAABwQQAA5EGamZlAAABwQQAA0EGamZlAAABAQQAA0EGamZlAAABAQQAA5EGamZlAZmbqQQAA0ECamZlAZmbKQQAA0ECamZlAZmbKQZqZLUGamZlAZmbqQZqZLUGamZlAZmbqQZqZq8GamZlAZmbKQZqZq8GamZlAZmbKQc3MiMGamZlAZmbqQc3MiMGamZlAAACwQAAA5EGamZlAAACwQAAA5MGamZlAAABAQQAA1MHNzARBzcwsQQAA1MHNzARBAABwQQAA1MHNzARBZmauQQAA1MHNzARBAABAQWZmysGamZlAAABAQWZmysHNzARBzcykQWZmysHNzARBzcykQWZmysGamZlAAABAQZqZrcGamZlAAABAQZqZrcHNzARBzcykQZqZrcGamZlAzcykQZqZrcHNzARBAABwQQAA0MHNzARBZmauQQAApMHNzARBzcwsQQAApMHNzARBAABAQQAA0MHNzARBAABAQQAA0MEAANxBAABwQQAA0MEAANxBAABAQQAA5MEAANxBmpkZQgAA0MEAANxBmpkZQgAA5MEAANxBAABwQQAA5MEAANxBAACwQAAA5MEAANxBZmbqQQAA0EAAAIhBZmbqQZqZLUEAAIhBZmbKQZqZLUEAAIhBZmbKQQAA0EAAAIhBZmbqQZqZq8EAAIhBZmbqQc3MiMEAAIhBZmbKQc3MiMEAAIhBZmbKQZqZq8EAAIhBAAAQQQAA9MHNzOxAAAAQQQAA9MEzMzNAAAAQQQAADMIzMzNAAAAQQQAADMLNzOxAAACwQQAA9MHNzOxAAACwQQAADMLNzOxAAACwQQAADMIzMzNAAACwQQAA9MEzMzNAmpktQgAA9MEzMzNAmpktQgAA9MEAANxBAACwQAAA9MEAANxBAACwQAAA9MEzMzNAAACwQQAA9EHNzOxAAACwQQAA9EEzMzNAAACwQQAADEIzMzNAAACwQQAADELNzOxAAAAQQQAA9EHNzOxAAAAQQQAADELNzOxAAAAQQQAA9EEzMzNAAAAQQQAADEIzMzNAAACwQAAA9EEzMzNAmpktQgAA9EEzMzNA","i":"AQAxAAAAAAAxADIAAAAyABcAFwAyAEcAFwBHABYAFgBHAEYAFgBGABUAFQBGAEUAFQBFABQAFABFAEQAFABEABMAEwBEAEMAEwBDABIAEgBDAEIAEgBCABEAEQBCAEEAEQBBABAAEABBAEAAEABAAA8ADwBAAD8ADwA/AA4ADgA/AD4ADgA+AA0ADQA+AD0ADQA9AAwADAA9ADAADAAwAAsACwAwADwACwA8AAoACgA8ADsACgA7AAkACQA7ADoACQA6AAgACAA6ADkACAA5AAcABwA5ADgABwA4AAYABgA4ADcABgA3AAUABQA3ADYABQA2AAQABAA2ADUABAA1AAMAAwA1ADQAAwA0AAIAAgA0ADMAAgAzAAEAAQAzADEAGQBHABgAGABHADIAGAAyAC8ALwAyADEALwAxAC4ALgAxADMALgAzAC0ALQAzADQALQA0ACwALAA0ADUALAA1ACsAKwA1ADYAKwA2ACoAKgA2ADcAKgA3ACkAKQA3ADgAKQA4ACgAKAA4ADkAKAA5ACcAJwA5ADoAJwA6ACYAJgA6ADsAJgA7ACUAJQA7ADwAJQA8ACQAJAA8ADAAJAAwACMAIwAwAD0AIwA9ACIAIgA9AD4AIgA+ACEAIQA+AD8AIQA/ACAAIAA/AEAAIABAAB8AHwBAAEEAHwBBAB4AHgBBAEIAHgBCAB0AHQBCAEMAHQBDABwAHABDAEQAHABEABsAGwBEAEUAGwBFABoAGgBFAEYAGgBGABkAGQBGAEcAFwANAAAAAAANAAwAAAAMAAEAAQAMAAsAAQALAAIAAgALAAoAAgAKAAMAAwAKAAkAAwAJAAQABAAJAAgABAAIAAUABQAIAAcABQAHAAYADQAXAA4ADgAXABYADgAWAA8ADwAWABUADwAVABAAEAAVABQAEAAUABEAEQAUABMAEQATABIASQB5AEgASAB5AHoASAB6AF8AXwB6AI8AXwCPAF4AXgCPAI4AXgCOAF0AXQCOAI0AXQCNAFwAXACNAIwAXACMAFsAWwCMAIsAWwCLAFoAWgCLAIoAWgCKAFkAWQCKAIkAWQCJAFgAWACJAIgAWACIAFcAVwCIAIcAVwCHAFYAVgCHAIYAVgCGAFUAVQCGAIUAVQCFAFQAVACFAHgAVAB4AFMAUwB4AIQAUwCEAFIAUgCEAIMAUgCDAFEAUQCDAIIAUQCCAFAAUACCAIEAUACBAE8ATwCBAIAATwCAAE4ATgCAAH8ATgB/AE0ATQB/AH4ATQB+AEwATAB+AH0ATAB9AEsASwB9AHwASwB8AEoASgB8AHsASgB7AEkASQB7AHkAYQCPAGAAYACPAHoAYAB6AHcAdwB6AHkAdwB5AHYAdgB5AHsAdgB7AHUAdQB7AHwAdQB8AHQAdAB8AH0AdAB9AHMAcwB9AH4AcwB+AHIAcgB+AH8AcgB/AHEAcQB/AIAAcQCAAHAAcACAAIEAcACBAG8AbwCBAIIAbwCCAG4AbgCCAIMAbgCDAG0AbQCDAIQAbQCEAGwAbACEAHgAbAB4AGsAawB4AIUAawCFAGoAagCFAIYAagCGAGkAaQCGAIcAaQCHAGgAaACHAIgAaACIAGcAZwCIAIkAZwCJAGYAZgCJAIoAZgCKAGUAZQCKAIsAZQCLAGQAZACLAIwAZACMAGMAYwCMAI0AYwCNAGIAYgCNAI4AYgCOAGEAYQCOAI8AXwBVAEgASABVAFQASABUAEkASQBUAFMASQBTAEoASgBTAFIASgBSAEsASwBSAFEASwBRAEwATABRAFAATABQAE0ATQBQAE8ATQBPAE4AVQBfAFYAVgBfAF4AVgBeAFcAVwBeAF0AVwBdAFgAWABdAFwAWABcAFkAWQBcAFsAWQBbAFoAkQDBAJAAkADBAMIAkADCAKcApwDCANcApwDXAKYApgDXANYApgDWAKUApQDWANUApQDVAKQApADVANQApADUAKMAowDUANMAowDTAKIAogDTANIAogDSAKEAoQDSANEAoQDRAKAAoADRANAAoADQAJ8AnwDQAM8AnwDPAJ4AngDPAM4AngDOAJ0AnQDOAM0AnQDNAJwAnADNAMAAnADAAJsAmwDAAMwAmwDMAJoAmgDMAMsAmgDLAJkAmQDLAMoAmQDKAJgAmADKAMkAmADJAJcAlwDJAMgAlwDIAJYAlgDIAMcAlgDHAJUAlQDHAMYAlQDGAJQAlADGAMUAlADFAJMAkwDFAMQAkwDEAJIAkgDEAMMAkgDDAJEAkQDDAMEAqQDXAKgAqADXAMIAqADCAL8AvwDCAMEAvwDBAL4AvgDBAMMAvgDDAL0AvQDDAMQAvQDEALwAvADEAMUAvADFALsAuwDFAMYAuwDGALoAugDGAMcAugDHALkAuQDHAMgAuQDIALgAuADIAMkAuADJALcAtwDJAMoAtwDKALYAtgDKAMsAtgDLALUAtQDLAMwAtQDMALQAtADMAMAAtADAALMAswDAAM0AswDNALIAsgDNAM4AsgDOALEAsQDOAM8AsQDPALAAsADPANAAsADQAK8ArwDQANEArwDRAK4ArgDRANIArgDSAK0ArQDSANMArQDTAKwArADTANQArADUAKsAqwDUANUAqwDVAKoAqgDVANYAqgDWAKkAqQDWANcApwCdAJAAkACdAJwAkACcAJEAkQCcAJsAkQCbAJIAkgCbAJoAkgCaAJMAkwCaAJkAkwCZAJQAlACZAJgAlACYAJUAlQCYAJcAlQCXAJYAnQCnAJ4AngCnAKYAngCmAJ8AnwCmAKUAnwClAKAAoAClAKQAoACkAKEAoQCkAKMAoQCjAKIA2QAJAdgA2AAJAQoB2AAKAe8A7wAKAR8B7wAfAe4A7gAfAR4B7gAeAe0A7QAeAR0B7QAdAewA7AAdARwB7AAcAesA6wAcARsB6wAbAeoA6gAbARoB6gAaAekA6QAaARkB6QAZAegA6AAZARgB6AAYAecA5wAYARcB5wAXAeYA5gAXARYB5gAWAeUA5QAWARUB5QAVAeQA5AAVAQgB5AAIAeMA4wAIARQB4wAUAeIA4gAUARMB4gATAeEA4QATARIB4QASAeAA4AASAREB4AARAd8A3wARARAB3wAQAd4A3gAQAQ8B3gAPAd0A3QAPAQ4B3QAOAdwA3AAOAQ0B3AANAdsA2wANAQwB2wAMAdoA2gAMAQsB2gALAdkA2QALAQkB8QAfAfAA8AAfAQoB8AAKAQcBBwEKAQkBBwEJAQYBBgEJAQsBBgELAQUBBQELAQwBBQEMAQQBBAEMAQ0BBAENAQMBAwENAQ4BAwEOAQIBAgEOAQ8BAgEPAQEBAQEPARABAQEQAQABAAEQAREBAAERAf8A/wARARIB/wASAf4A/gASARMB/gATAf0A/QATARQB/QAUAfwA/AAUAQgB/AAIAfsA+wAIARUB+wAVAfoA+gAVARYB+gAWAfkA+QAWARcB+QAXAfgA+AAXARgB+AAYAfcA9wAYARkB9wAZAfYA9gAZARoB9gAaAfUA9QAaARsB9QAbAfQA9AAbARwB9AAcAfMA8wAcAR0B8wAdAfIA8gAdAR4B8gAeAfEA8QAeAR8B7wDlANgA2ADlAOQA2ADkANkA2QDkAOMA2QDjANoA2gDjAOIA2gDiANsA2wDiAOEA2wDhANwA3ADhAOAA3ADgAN0A3QDgAN8A3QDfAN4A5QDvAOYA5gDvAO4A5gDuAOcA5wDuAO0A5wDtAOgA6ADtAOwA6ADsAOkA6QDsAOsA6QDrAOoAIQFPASABIAFPATgBIAE4ATcBNwE4ATkBNwE5ATYBNgE5AToBNgE6ATUBNQE6ATsBNQE7ATQBNAE7ATwBNAE8ATMBMwE8AT0BMwE9ATIBMgE9AT4BMgE+ATEBMQE+AT8BMQE/ATABMAE/AUABMAFAAS8BLwFAAUEBLwFBAS4BLgFBAUIBLgFCAS0BLQFCAUMBLQFDASwBLAFDAUQBLAFEASsBKwFEAUUBKwFFASoBKgFFAUYBKgFGASkBKQFGAUcBKQFHASgBKAFHAUgBKAFIAScBJwFIAUkBJwFJASYBJgFJAUoBJgFKASUBJQFKAUsBJQFLASQBJAFLAUwBJAFMASMBIwFMAU0BIwFNASIBIgFNAU4BIgFOASEBIQFOAU8BUQF/AVABUAF/AWgBUAFoAWcBZwFoAWkBZwFpAWYBZgFpAWoBZgFqAWUBZQFqAWsBZQFrAWQBZAFrAWwBZAFsAWMBYwFsAW0BYwFtAWIBYgFtAW4BYgFuAWEBYQFuAW8BYQFvAWABYAFvAXABYAFwAV8BXwFwAXEBXwFxAV4BXgFxAXIBXgFyAV0BXQFyAXMBXQFzAVwBXAFzAXQBXAF0AVsBWwF0AXUBWwF1AVoBWgF1AXYBWgF2AVkBWQF2AXcBWQF3AVgBWAF3AXgBWAF4AVcBVwF4AXkBVwF5AVYBVgF5AXoBVgF6AVUBVQF6AXsBVQF7AVQBVAF7AXwBVAF8AVMBUwF8AX0BUwF9AVIBUgF9AX4BUgF+AVEBUQF+AX8BgQGzAYABgAGzAbIBgAGyAZgBmAGyAcoBmAHKAZcBlwHKAckBlwHJAZYBlgHJAcgBlgHIAZUBlQHIAccBlQHHAZQBlAHHAcYBlAHGAZMBkwHGAcUBkwHFAZIBkgHFAcQBkgHEAZEBkQHEAcMBkQHDAZABkAHDAcIBkAHCAY8BjwHCAcEBjwHBAY4BjgHBAcABjgHAAY0BjQHAAb8BjQG/AYwBjAG/Ab4BjAG+AYsBiwG+Ab0BiwG9AYoBigG9AbwBigG8AYkBiQG8AbsBiQG7AYgBiAG7AboBiAG6AYcBhwG6AbkBhwG5AYYBhgG5AbgBhgG4AYUBhQG4AbcBhQG3AYQBhAG3AbYBhAG2AYMBgwG2AbUBgwG1AYIBggG1AbQBggG0AYEBgQG0AbMBmgGyAZkBmQGyAbMBmQGzAbEBsQGzAbQBsQG0AbABsAG0AbUBsAG1Aa8BrwG1AbYBrwG2Aa4BrgG2AbcBrgG3Aa0BrQG3AbgBrQG4AawBrAG4AbkBrAG5AasBqwG5AboBqwG6AaoBqgG6AbsBqgG7AakBqQG7AbwBqQG8AagBqAG8Ab0BqAG9AacBpwG9Ab4BpwG+AaYBpgG+Ab8BpgG/AaUBpQG/AcABpQHAAaQBpAHAAcEBpAHBAaMBowHBAcIBowHCAaIBogHCAcMBogHDAaEBoQHDAcQBoQHEAaABoAHEAcUBoAHFAZ8BnwHFAcYBnwHGAZ4BngHGAccBngHHAZ0BnQHHAcgBnQHIAZwBnAHIAckBnAHJAZsBmwHJAcoBmwHKAZoBmgHKAbIBzAH+AcsBywH+Af0BywH9AeMB4wH9ARUC4wEVAuIB4gEVAhQC4gEUAuEB4QEUAhMC4QETAuAB4AETAhIC4AESAt8B3wESAhEC3wERAt4B3gERAhAC3gEQAt0B3QEQAg8C3QEPAtwB3AEPAg4C3AEOAtsB2wEOAg0C2wENAtoB2gENAgwC2gEMAtkB2QEMAgsC2QELAtgB2AELAgoC2AEKAtcB1wEKAgkC1wEJAtYB1gEJAggC1gEIAtUB1QEIAgcC1QEHAtQB1AEHAgYC1AEGAtMB0wEGAgUC0wEFAtIB0gEFAgQC0gEEAtEB0QEEAgMC0QEDAtAB0AEDAgIC0AECAs8BzwECAgECzwEBAs4BzgEBAgACzgEAAs0BzQEAAv8BzQH/AcwBzAH/Af4B5QH9AeQB5AH9Af4B5AH+AfwB/AH+Af8B/AH/AfsB+wH/AQAC+wEAAvoB+gEAAgEC+gEBAvkB+QEBAgIC+QECAvgB+AECAgMC+AEDAvcB9wEDAgQC9wEEAvYB9gEEAgUC9gEFAvUB9QEFAgYC9QEGAvQB9AEGAgcC9AEHAvMB8wEHAggC8wEIAvIB8gEIAgkC8gEJAvEB8QEJAgoC8QEKAvAB8AEKAgsC8AELAu8B7wELAgwC7wEMAu4B7gEMAg0C7gENAu0B7QENAg4C7QEOAuwB7AEOAg8C7AEPAusB6wEPAhAC6wEQAuoB6gEQAhEC6gERAukB6QERAhIC6QESAugB6AESAhMC6AETAucB5wETAhQC5wEUAuYB5gEUAhUC5gEVAuUB5QEVAv0BFwIYAhYCFgIYAhkCGQIaAhYCFgIaAhsCFwIcAhgCGAIcAh0CGgIZAiECIQIZAiACIAIZAhgCIAIYAh8CHwIYAh4CHgIYAh0CdwAeAmAAYAAeAiICYAAiAmEAYQAiAmIAYgAiAmMAYwAiAmQAZAAiAmUAZQAiAmYAZgAiAikCZgApAmcAZwApAmgAaAApAmkAaQApAmoAagApAmsAawApAmwAbAApAioCbAAqAm0AbQAqAm4AbgAqAm8AbwAqAnAAcAAqAnEAcQAqAnIAcgAqAh4CcgAeAnMAcwAeAnQAdAAeAnUAdQAeAnYAdgAeAncABwEnAvAA8AAnAigC8AAoAvEA8QAoAvIA8gAoAvMA8wAoAvQA9AAoAvUA9QAoAvYA9gAoAiUC9gAlAvcA9wAlAvgA+AAlAvkA+QAlAvoA+gAlAvsA+wAlAvwA/AAlAiYC/AAmAv0A/QAmAv4A/gAmAv8A/wAmAgABAAEmAgEBAQEmAgIBAgEmAicCAgEnAgMBAwEnAgQBBAEnAgUBBQEnAgYBBgEnAgcBHQIcAh4CHgIcAiICKQIiAigCKAIiAiMCKAIjAiUCJQIjAiQCKwIsAi4CLgIsAi0CLwIwAisCKwIwAiwCMQIyAi8CLwIyAjACLgItAjECMQItAjICNAI1AjMCMwI1AjYCNQI3AjYCNgI3AjgCMwI5AjQCNAI5AjoCOQI+AjoCOgI+AkkCOgJJAkoCPgI5Aj0CPQI5AjsCPQI7AjwCSQI+AkwCTAI+Aj8CTAI/AlECUQI/AlACUAI/AkACUAJAAk8CTwJAAkMCTwJDAkQCQQJCAkACQAJCAkMCIAJLAkQCRAJLAlICRAJSAk8CIAIfAksCSwIfAkUCSwJFAk4CTgJFAkYCTgJGAk0CTQJGAkcCTQJHAkgCTQJIAkwCTAJIAkkCSwJMAlICUgJMAlECNwJTAjgCOAJTAlQCPAJVAj0CPQJVAlYCVwJBAlgCWAJBAkACWQJaAlwCXAJaAlsCXQJeAlkCWQJeAloCXwJgAl0CXQJgAl4CXAJbAl8CXwJbAmACVwJbAmECYQJbAloCYQJaAmQCZAJaAlYCZAJWAlUCVwJYAlsCWwJYAmACYAJYAmICYAJiAmMCYAJjAl4CXgJjAlYCXgJWAloCYwI+AlYCVgI+Aj0CYgI/AmMCYwI/Aj4CWAJAAmICYgJAAj8CZAJlAmECYQJlAmYCZAJVAmUCZQJVAmcCZwJVAjsCOwJVAjwCMgItAlwCXAItAiwCXAIsAlkCWQIsAjACWQIwAl0CXQIwAl8CXwIwAjICXwIyAlwCaAJEAmkCaQJEAkMCIQIgAmgCaAIgAkQCaQJDAmoCagJDAkICKgJFAh4CHgJFAh8CKQJGAioCKgJGAkUCYQJmAlcCVwJmAmoCVwJqAkICQgJBAlcCOwI5AmcCZwI5AmsCawI5AjgCawI4AlQCOQIzAjgCOAIzAjYCJgJJAicCJwJJAkgCJQJKAiYCJgJKAkkCJwJIAigCKAJIAkcCRgIpAkcCRwIpAigCbQJuAmwCbAJuAm8CbwJMAmwCbAJMAksCIQEgAUwCTAIgATcBTAI3AU0CTQI3ATYBTQI2ATUBNQE0AU0CTQI0ATMBTQIzATIBTQIyAW4CbgIyATEBbgIxATABMAEvAW4CbgIvAS4BbgIuAS0BbgItAW8CbwItASwBbwIsASsBKwEqAW8CbwIqASkBbwIpASgBKAEnAW8CbwInASYBbwImAUwCTAImASUBTAIlASQBJAEjAUwCTAIjASIBTAIiASEBbQJOAm4CbgJOAk0COQE4AUsCSwI4AU8BSwJPAU4BTgFNAUsCSwJNAUwBSwJMAUsBSwFKAUsCSwJKAWwCbAJKAUkBbAJJAUgBSAFHAWwCbAJHAUYBbAJGAUUBRQFEAWwCbAJEAUMBbAJDAW0CbQJDAUIBbQJCAUEBQQFAAW0CbQJAAT8BbQI/AT4BbQI+AU4CTgI+AT0BTgI9ATwBPAE7AU4CTgI7AToBTgI6ATkBTgI5AUsCcQJyAnACcAJyAnMCcwJQAnACcAJQAk8CUQFQAVECUQJQAWcBUQJnAWYBZgFlAVECUQJlAWQBUQJkAWMBYwFiAVECUQJiAXICcgJiAWEBcgJhAWABYAFfAXICcgJfAV4BcgJeAV0BXQFcAXICcgJcAVsBcgJbAXMCcwJbAVoBcwJaAVkBWQFYAXMCcwJYAVcBcwJXAVYBcwJWAVACUAJWAVUBUAJVAVQBVAFTAVACUAJTAVIBUAJSAVEBUAJRAVECcQJSAnICcgJSAlECaQFoAVICUgJoAX8BUgJ/AU8CTwJ/AX4BTwJ+AX0BfQF8AU8CTwJ8AXsBTwJ7AXoBTwJ6AXACcAJ6AXkBcAJ5AXgBeAF3AXACcAJ3AXYBcAJ2AXUBcAJ1AXECcQJ1AXQBcQJ0AXMBcwFyAXECcQJyAXEBcQJxAXABcAFvAXECcQJvAW4BcQJuAVICUgJuAW0BUgJtAWwBbAFrAVICUgJrAWoBUgJqAWkBmAF1AoABgAF1AnYCgAF2AoEBgQF2AoIBggF2AoMBgwF2AoQBhAF2AoUBhQF2AoYBhgF2AncChgF3AocBhwF3AogBiAF3AokBiQF3AooBigF3AosBiwF3AowBjAF3Ao0BjQF3AnQCjQF0Ao4BjgF0Ao8BjwF0ApABkAF0ApEBkQF0ApIBkgF0ApMBkwF0AnUCkwF1ApQBlAF1ApUBlQF1ApYBlgF1ApcBlwF1ApgBeAJ0AnkCeQJ0AncCdwJ2AnkCeQJ2AnoCsQF6ApkBmQF6AnsCmQF7ApoBmgF7ApsBmwF7ApwBnAF7Ap0BnQF7Ap4BngF7Ap8BnwF7AngCnwF4AqABoAF4AqEBoQF4AqIBogF4AqMBowF4AqQBpAF4AqUBpQF4AnkCpQF5AqYBpgF5AqcBpwF5AqgBqAF5AqkBqQF5AqoBqgF5AqsBqwF5AqwBrAF5AnoCrAF6Aq0BrQF6Aq4BrgF6Aq8BrwF6ArABsAF6ArEBdQJ0An8CfwJ0An4CfgJ0AngCfgJ4An0CfQJ4AnwCfAJ4AnsC/AGBAuQB5AGBAoIC5AGCAuUB5QGCAuYB5gGCAucB5wGCAugB6AGCAukB6QGCAuoB6gGCAoMC6gGDAusB6wGDAuwB7AGDAu0B7QGDAu4B7gGDAu8B7wGDAvAB8AGDAvEB8QGDAoAC8QGAAvIB8gGAAvMB8wGAAvQB9AGAAvUB9QGAAvYB9gGAAvcB9wGAAoEC9wGBAvgB+AGBAvkB+QGBAvoB+gGBAvsB+wGBAvwBhAKAAoUChQKAAoMC4wGHAssBywGHAoYCywGGAswBzAGGAs0BzQGGAs4BzgGGAs8BzwGGAtAB0AGGAtEB0QGGAoQC0QGEAtIB0gGEAtMB0wGEAtQB1AGEAtUB1QGEAtYB1gGEAtcB1wGEAoUC1wGFAtgB2AGFAtkB2QGFAtoB2gGFAtsB2wGFAtwB3AGFAt0B3QGFAt4B3gGFAocC3gGHAt8B3wGHAuAB4AGHAuEB4QGHAuIB4gGHAuMBgwKCAoUChQKCAocCgQKAAokCiQKAAiICIgKAAiMCIwKAAoQCIwKEAogCiAKEAoYCSgIlAjoCOgIlAiQCOgIkAjcCNwIkAlMCNwI1AjoCOgI1AjQCLgJ7AisCKwJ7AnoCKwJ6AnYCLgIxAnsCewIxAnwCfAIxAoECfAKBAokCMQIvAoECgQIvAoYCgQKGAoICggKGAocCKwJ1Ai8CLwJ1An8CLwJ/AogCiAKGAi8CdgJ1AisCLwB9AhgAGAB9AiECGAAhAhkAGQAhAhoAGgAhAhsAGwAhAhwAHAAhAh0AHQAhAh4AHgAhAmgCHgBoAh8AHwBoAiAAIABoAiEAIQBoAiIAIgBoAiMAIwBoAiQAJABoAmkCJABpAiUAJQBpAiYAJgBpAicAJwBpAigAKABpAikAKQBpAioAKgBpAn0CKgB9AisAKwB9AiwALAB9Ai0ALQB9Ai4ALgB9Ai8AvwBqAqgAqABqAmYCqABmAqkAqQBmAqoAqgBmAqsAqwBmAqwArABmAq0ArQBmAq4ArgBmAmUCrgBlAq8ArwBlArAAsABlArEAsQBlArIAsgBlArMAswBlArQAtABlAmcCtABnArUAtQBnArYAtgBnArcAtwBnArgAuABnArkAuQBnAroAugBnAmoCugBqArsAuwBqArwAvABqAr0AvQBqAr4AvgBqAr8AGgIhAhsCGwIhAn0CaQJqAn0CfQJqAn4CfgJqAmcCfgJnAmsCGwJ9AhYCFgJ9AnwCFgJ8AhcCFwJ8AokCFwKJAiICIgIcAhcCUwJ/AlQCVAJ/An4CVAJ+AmsCJAIjAlMCUwIjAogCUwKIAn8C"},"Lid":{"v":"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","i":"AQAvAAAAAAAvABgAAAAYABcAFwAYABkAFwAZABYAFgAZABoAFgAaABUAFQAaABsAFQAbABQAFAAbABwAFAAcABMAEwAcAB0AEwAdABIAEgAdAB4AEgAeABEAEQAeAB8AEQAfABAAEAAfACAAEAAgAA8ADwAgACEADwAhAA4ADgAhACIADgAiAA0ADQAiACMADQAjAAwADAAjACQADAAkAAsACwAkACUACwAlAAoACgAlACYACgAmAAkACQAmACcACQAnAAgACAAnACgACAAoAAcABwAoACkABwApAAYABgApACoABgAqAAUABQAqACsABQArAAQABAArACwABAAsAAMAAwAsAC0AAwAtAAIAAgAtAC4AAgAuAAEAAQAuAC8AMQBfADAAMABfAEgAMABIAEcARwBIAEkARwBJAEYARgBJAEoARgBKAEUARQBKAEsARQBLAEQARABLAEwARABMAEMAQwBMAE0AQwBNAEIAQgBNAE4AQgBOAEEAQQBOAE8AQQBPAEAAQABPAFAAQABQAD8APwBQAFEAPwBRAD4APgBRAFIAPgBSAD0APQBSAFMAPQBTADwAPABTAFQAPABUADsAOwBUAFUAOwBVADoAOgBVAFYAOgBWADkAOQBWAFcAOQBXADgAOABXAFgAOABYADcANwBYAFkANwBZADYANgBZAFoANgBaADUANQBaAFsANQBbADQANABbAFwANABcADMAMwBcAF0AMwBdADIAMgBdAF4AMgBeADEAMQBeAF8AYQCPAGAAYACPAHgAYAB4AHcAdwB4AHkAdwB5AHYAdgB5AHoAdgB6AHUAdQB6AHsAdQB7AHQAdAB7AHwAdAB8AHMAcwB8AH0AcwB9AHIAcgB9AH4AcgB+AHEAcQB+AH8AcQB/AHAAcAB/AIAAcACAAG8AbwCAAIEAbwCBAG4AbgCBAIIAbgCCAG0AbQCCAIMAbQCDAGwAbACDAIQAbACEAGsAawCEAIUAawCFAGoAagCFAIYAagCGAGkAaQCGAIcAaQCHAGgAaACHAIgAaACIAGcAZwCIAIkAZwCJAGYAZgCJAIoAZgCKAGUAZQCKAIsAZQCLAGQAZACLAIwAZACMAGMAYwCMAI0AYwCNAGIAYgCNAI4AYgCOAGEAYQCOAI8AkQC/AJAAkAC/AKgAkACoAKcApwCoAKkApwCpAKYApgCpAKoApgCqAKUApQCqAKsApQCrAKQApACrAKwApACsAKMAowCsAK0AowCtAKIAogCtAK4AogCuAKEAoQCuAK8AoQCvAKAAoACvALAAoACwAJ8AnwCwALEAnwCxAJ4AngCxALIAngCyAJ0AnQCyALMAnQCzAJwAnACzALQAnAC0AJsAmwC0ALUAmwC1AJoAmgC1ALYAmgC2AJkAmQC2ALcAmQC3AJgAmAC3ALgAmAC4AJcAlwC4ALkAlwC5AJYAlgC5ALoAlgC6AJUAlQC6ALsAlQC7AJQAlAC7ALwAlAC8AJMAkwC8AL0AkwC9AJIAkgC9AL4AkgC+AJEAkQC+AL8AwQDvAMAAwADvANgAwADYANcA1wDYANkA1wDZANYA1gDZANoA1gDaANUA1QDaANsA1QDbANQA1ADbANwA1ADcANMA0wDcAN0A0wDdANIA0gDdAN4A0gDeANEA0QDeAN8A0QDfANAA0ADfAOAA0ADgAM8AzwDgAOEAzwDhAM4AzgDhAOIAzgDiAM0AzQDiAOMAzQDjAMwAzADjAOQAzADkAMsAywDkAOUAywDlAMoAygDlAOYAygDmAMkAyQDmAOcAyQDnAMgAyADnAOgAyADoAMcAxwDoAOkAxwDpAMYAxgDpAOoAxgDqAMUAxQDqAOsAxQDrAMQAxADrAOwAxADsAMMAwwDsAO0AwwDtAMIAwgDtAO4AwgDuAMEAwQDuAO8A8QAfAfAA8AAfAQgB8AAIAQcBBwEIAQkBBwEJAQYBBgEJAQoBBgEKAQUBBQEKAQsBBQELAQQBBAELAQwBBAEMAQMBAwEMAQ0BAwENAQIBAgENAQ4BAgEOAQEBAQEOAQ8BAQEPAQABAAEPARABAAEQAf8A/wAQAREB/wARAf4A/gARARIB/gASAf0A/QASARMB/QATAfwA/AATARQB/AAUAfsA+wAUARUB+wAVAfoA+gAVARYB+gAWAfkA+QAWARcB+QAXAfgA+AAXARgB+AAYAfcA9wAYARkB9wAZAfYA9gAZARoB9gAaAfUA9QAaARsB9QAbAfQA9AAbARwB9AAcAfMA8wAcAR0B8wAdAfIA8gAdAR4B8gAeAfEA8QAeAR8BIQFPASABIAFPATgBIAE4ATcBNwE4ATkBNwE5ATYBNgE5AToBNgE6ATUBNQE6ATsBNQE7ATQBNAE7ATwBNAE8ATMBMwE8AT0BMwE9ATIBMgE9AT4BMgE+ATEBMQE+AT8BMQE/ATABMAE/AUABMAFAAS8BLwFAAUEBLwFBAS4BLgFBAUIBLgFCAS0BLQFCAUMBLQFDASwBLAFDAUQBLAFEASsBKwFEAUUBKwFFASoBKgFFAUYBKgFGASkBKQFGAUcBKQFHASgBKAFHAUgBKAFIAScBJwFIAUkBJwFJASYBJgFJAUoBJgFKASUBJQFKAUsBJQFLASQBJAFLAUwBJAFMASMBIwFMAU0BIwFNASIBIgFNAU4BIgFOASEBIQFOAU8BUQFSAVABUAFSAVMBVAFSAVUBVQFSAVEBVgFTAVQBVAFTAVIBVwFQAVYBVgFQAVMBVQFRAVcBVwFRAVABLwBJABgAGABJAEgAGABIAO0A7QBIAKsA7QCrAKoALwAuAEkASQAuAEoASgAuAC0ASgAtAEsASwAtACwASwAsAEwATAAsACsATAArAE0ATQArACoATQAqAE4ATgAqAE8ATwAqACkATwApAFAAUAApACgAUAAoAFEAUQAoACcAUQAnACYAUQAmAFIAUgAmACUAUgAlAFMAUwAlACQAUwAkAFQAVAAkAEoBVABKAQ4BDgFKAQ8BDwFKAUkBDwFJARABEAFJAUgBEAFIAUcBIwBMASQAJABMAUsBJABLAUoBTAEjAE0BTQEjACIATQEiAE4BTgEiACEATgEhAE8BTwEhACAATwEgAOUA5QAgAB8A5QAfAB4A5QAeAOYA5gAeAB0A5gAdABwA5gAcAOcA5wAcABsA5wAbAOgA6AAbABoA6AAaAOkA6QAaAOoA6gAaABkA6gAZAOsA6wAZAOwA7AAZABgA7AAYAO0AXwB5AEgASAB5AHgASAB4AKsAqwB4AKwArAB4AI8ArACPAK0ArQCPAK4ArgCPAI4ArgCOAK8ArwCOALAAsACOAI0AsACNALEAsQCNAIwAsQCMALIAsgCMAIsAsgCLAIoAeQBfAHoAegBfAF4AegBeAF0AegBdAHsAewBdAFwAewBcAHwAfABcAFsAfABbAH0AfQBbAFoAfQBaAH4AfgBaAH8AfwBaAFkAfwBZAIAAgABZAFgAgABYAIEAgQBYAFcAgQBXAFYAgQBWAIIAggBWAFUAggBVAIMAgwBVAFQAgwBUAIQAhABUAA4BhAAOAQ0BsgCKALMAswCKAIkAswCJAIgAswCIAAkBCQGIAIcACQGHAAoBCgGHAIYACgGGAAsBCwGGAIUACwGFAAwBDAGFAIQADAGEAA0BqQCoAFgBWAGoAL8AWAG/AL4AvgC9AFgBWAG9ALwAWAG8ALsAuwC6AFgBWAG6ALkAWAG5ALgAtwAdAbgAuAAdARwBuAAcAVgBWAEcARsBWAEbAVsBWwEbARoBWwEaARkBHQG3AB4BHgG3ALYAHgG2AB8BHwG2ALUAHwG1AAgBCAG1ALQACAG0AAkBCQG0ALMAqQBYAaoAqgBYAe4AqgDuAO0A2QDYAFkBWQHYAO8AWQHvAO4ATwHlADgBOAHlAOQAOAHkADkBOQHkAOMAOQHjADoBOgHjAOIAOgHiADsBOwHiAOEAOwHhADwBPAHhAOAAPAHgAFkBWQHgAN8AWQHfAN4A3gDdAFkBWQHdANwAWQHcANsA2wDaAFkBWQHaANkAGQEYAVsBWwEYARcBWwEXARYBFgEVAVsBWwEVARQBWwEUARMBEwESAVsBWwESAREBWwERAUcBRwERARABWwFHAVoBWgFHAUYBWgFGAUUBRQFEAVoBWgFEAUMBWgFDAUIBQgFBAVoBWgFBAUABWgFAAT8BPwE+AVoBWgE+AT0BWgE9AVkBWQE9ATwBWAFZAe4AXQHCAFwBXAHCAMEAXAHBAMAAXgH1AF0BXQH1APQAXQH0AJgAmAD0AJkAmQD0APMAmQDzAJoAmgDzAPIAmgDyAJsAmwDyAPEAmwDxAJwAnADxAPAAnADwAJ0AnQDwAAcBnQAHAWgAaAAHAWkAaQAHAQYBaQAGAWoAagAGAQUBagAFAWsAawAFAQQBawAEAWwAbAAEAQMBbAADAQIBXwFWAV4BXgFWAVQBXgFUAVUBXAEzAV8BXwEzATIBXwEyATEBVwEpAVUBVQEpAf8AVQH/AP4AVgFfAVcBVwFfATEBVwExATABNwHNACABIAHNAMwAIAHMACEBIQHMAMsAIQHLABAAEADLABEAEQDLABIAEgDLAMoAEgDKABMAEwDKABQAFADKAMkAFADJABUAFQDJAMgAFQDIABYAFgDIAMcAFgDHAMYAzQA3Ac4AzgA3ATYBzgA2Ac8AzwA2ATUBzwA1AdAA0AA1ATQB0AA0AVwBXAE0ATMBMAEvAVcBVwEvAS4BVwEuAS0BLQEsAVcBVwEsASsBVwErASoBKgEpAVcB/wApAQABAAEpASgBAAEoAScBAAEnAQEBAQEnASYBAQEmAQIBAgEmATwAAgE8AGwAbAA8AG0AbQA8ADsAbQA7AG4AbgA7ADoAbgA6AG8AbwA6ADkAbwA5ADgAPAAmAQwADAAmASUBDAAlASQBDAAkAQ0ADQAkASMBDQAjAQ4ADgAjASIBDgAiAQ8ADwAiASEBDwAhARAA/gD9AFUBVQH9APwAVQH8APsA+wD6AFUBVQH6APkAVQH5APgA+AD3AFUBVQH3AF4B9wD2AF4BXgH2APUAwADXAFwBXAHXANYAXAHWANUA1QDUAFwBXAHUANMAXAHTANIA0gDRAFwBXAHRANAAFgDGABcAFwDGAMUAFwDFAMQAFwDEAAAAAADEAMMAAADDADAAMADDAKUAMAClAGAAYAClAKQAYACkAGEAYQCkAKMAYQCjAKIApQDDAKYApgDDAMIApgDCAF0BkQCQAF0BXQGQAKcAXQGnAKYAYQCiAGIAYgCiAKEAYgChAKAAYgCgAGMAYwCgAJ8AYwCfAGQAZACfAJ4AZACeAGUAZQCeAGYAZgCeAJ0AZgCdAGcAZwCdAGgAmACXAF0BXQGXAJYAXQGWAJUAlQCUAF0BXQGUAJMAXQGTAJIAkgCRAF0BYAB3ADAAMAB3ADEAMQB3AHYAMQB2ADIAMgB2ADMAMwB2AHUAMwB1ADQANAB1AHQANAB0ADUANQB0AHMANQBzADYANgBzAHIANgByAHEANgBxADcANwBxAHAANwBwADgAOABwAG8AMABHAAAAAABHAAEAAQBHAAIAAgBHAEYAAgBGAAMAAwBGAEUAAwBFAAQABABFAEQABABEAAUABQBEAEMABQBDAAYABgBDAEIABgBCAEEABgBBAAcABwBBAEAABwBAAAgACABAAD8ACAA/AAkACQA/AD4ACQA+AAoACgA+AAsACwA+AD0ACwA9AAwADAA9ADwAWwFeAVgBWAFeAV0BWgFfAVsBWwFfAV4BWQFcAVoBWgFcAV8BWAFdAVkBWQFdAVwB"},"Rail base":{"v":"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","i":"AQAvAAAAAAAvABgAAAAYABcAFwAYABkAFwAZABYAFgAZABoAFgAaABUAFQAaABsAFQAbABQAFAAbABwAFAAcABMAEwAcAB0AEwAdABIAEgAdAB4AEgAeABEAEQAeAB8AEQAfABAAEAAfACAAEAAgAA8ADwAgACEADwAhAA4ADgAhACIADgAiAA0ADQAiACMADQAjAAwADAAjACQADAAkAAsACwAkACUACwAlAAoACgAlACYACgAmAAkACQAmACcACQAnAAgACAAnACgACAAoAAcABwAoACkABwApAAYABgApACoABgAqAAUABQAqACsABQArAAQABAArACwABAAsAAMAAwAsAC0AAwAtAAIAAgAtAC4AAgAuAAEAAQAuAC8AMQBfADAAMABfAEgAMABIAEcARwBIAEkARwBJAEYARgBJAEoARgBKAEUARQBKAEsARQBLAEQARABLAEwARABMAEMAQwBMAE0AQwBNAEIAQgBNAE4AQgBOAEEAQQBOAE8AQQBPAEAAQABPAFAAQABQAD8APwBQAFEAPwBRAD4APgBRAFIAPgBSAD0APQBSAFMAPQBTADwAPABTAFQAPABUADsAOwBUAFUAOwBVADoAOgBVAFYAOgBWADkAOQBWAFcAOQBXADgAOABXAFgAOABYADcANwBYAFkANwBZADYANgBZAFoANgBaADUANQBaAFsANQBbADQANABbAFwANABcADMAMwBcAF0AMwBdADIAMgBdAF4AMgBeADEAMQBeAF8AYQCPAGAAYACPAHgAYAB4AHcAdwB4AHkAdwB5AHYAdgB5AHoAdgB6AHUAdQB6AHsAdQB7AHQAdAB7AHwAdAB8AHMAcwB8AH0AcwB9AHIAcgB9AH4AcgB+AHEAcQB+AH8AcQB/AHAAcAB/AIAAcACAAG8AbwCAAIEAbwCBAG4AbgCBAIIAbgCCAG0AbQCCAIMAbQCDAGwAbACDAIQAbACEAGsAawCEAIUAawCFAGoAagCFAIYAagCGAGkAaQCGAIcAaQCHAGgAaACHAIgAaACIAGcAZwCIAIkAZwCJAGYAZgCJAIoAZgCKAGUAZQCKAIsAZQCLAGQAZACLAIwAZACMAGMAYwCMAI0AYwCNAGIAYgCNAI4AYgCOAGEAYQCOAI8AkQC/AJAAkAC/AKgAkACoAKcApwCoAKkApwCpAKYApgCpAKoApgCqAKUApQCqAKsApQCrAKQApACrAKwApACsAKMAowCsAK0AowCtAKIAogCtAK4AogCuAKEAoQCuAK8AoQCvAKAAoACvALAAoACwAJ8AnwCwALEAnwCxAJ4AngCxALIAngCyAJ0AnQCyALMAnQCzAJwAnACzALQAnAC0AJsAmwC0ALUAmwC1AJoAmgC1ALYAmgC2AJkAmQC2ALcAmQC3AJgAmAC3ALgAmAC4AJcAlwC4ALkAlwC5AJYAlgC5ALoAlgC6AJUAlQC6ALsAlQC7AJQAlAC7ALwAlAC8AJMAkwC8AL0AkwC9AJIAkgC9AL4AkgC+AJEAkQC+AL8AwQDCAMAAwADCAMMAFwDEAAAAAADEAMUAAADFAAEAAQDFAAIAAgDFAAMAAwDFAAQABADFAAUABQDFAAYABgDFAMMABgDDAAcABwDDAAgACADDAAkACQDDAAoACgDDAAsACwDDAAwADADDAMIADADCAA0ADQDCAA4ADgDCAA8ADwDCABAAEADCABEAEQDCABIAEgDCAMQAEgDEABMAEwDEABQAFADEABUAFQDEABYAFgDEABcAwQDGAMIAwgDGAMQAyADJAMcAxwDJAMoAyADLAMkAyQDLAMwAXwDNAEgASADNAMsASADLAEkASQDLAEoASgDLAEsASwDLAEwATADLAE0ATQDLAE4ATgDLAMgATgDIAE8ATwDIAFAAUADIAFEAUQDIAFIAUgDIAFMAUwDIAFQAVADIAMcAVADHAFUAVQDHAFYAVgDHAFcAVwDHAFgAWADHAFkAWQDHAFoAWgDHAM0AWgDNAFsAWwDNAFwAXADNAF0AXQDNAF4AXgDNAF8AxgDXAMQAxADXANQAxADUAMUAxQDUANUAxQDVAM0AzQDVAMsAywDVANYAywDWANIA0gDWAM8A0gDPANEA0QDPANAAxgDOANcA1wDOAM8A1wDPANYA0wDMANIA0gDMAMsA2QDaANgA2ADaANsA2wDPANgA2ADPAM4AdwDQAGAAYADQAM8AYADPAGEAYQDPAGIAYgDPAGMAYwDPAGQAZADPAGUAZQDPAGYAZgDPANsAZgDbAGcAZwDbAGgAaADbAGkAaQDbAGoAagDbAGsAawDbAGwAbADbANoAbADaAG0AbQDaAG4AbgDaAG8AbwDaAHAAcADaAHEAcQDaAHIAcgDaANAAcgDQAHMAcwDQAHQAdADQAHUAdQDQAHYAdgDQAHcA3QDeANwA3ADeAN8A3wDTANwA3ADTANIAvwDSAKgAqADSANEAqADRAKkAqQDRAKoAqgDRAKsAqwDRAKwArADRAK0ArQDRAK4ArgDRAN0ArgDdAK8ArwDdALAAsADdALEAsQDdALIAsgDdALMAswDdALQAtADdANwAtADcALUAtQDcALYAtgDcALcAtwDcALgAuADcALkAuQDcALoAugDcANIAugDSALsAuwDSALwAvADSAL0AvQDSAL4AvgDSAL8A4QDiAOAA4ADiAOMA4wDVAOAA4ADVANQA4gDWAOMA4wDWANUA4QDXAOIA4gDXANYA4ADUAOEA4QDUANcA5QDmAOQA5ADmAOcAxwDKAM0AzQDKAOYAzQDmAMUAxQDmAOUAxQDlAMAAwADDAMUAMQAwAMwAzAAwAEcAzABHAEYARgBFAMwAzABFAEQAzABEAEMAQwBCAMwAzABCAMkAyQBCAEEAyQBBAEAAQAA/AMkAyQA/AD4AyQA+AD0APQA8AMkAyQA8AMoAygA8ADsAygA7ADoAOgA5AMoAygA5ADgAygA4ADcANwA2AMoAygA2ADUAygA1AOYA5gA1ADQA5gA0ADMAMwAyAOYA5gAyADEA5gAxAMwAkQCQANMA0wCQAKcA0wCnAOcA5wCnAKYA5wCmAKUApQCkAOcA5wCkAKMA5wCjAN4A3gCjAKIA3gCiAKEAoQCgAN4A3gCgAJ8A3gCfAJ4AngCdAN4A3gCdAJwA3gCcAN8A3wCcAJsA3wCbAJoAmgCZAN8A3wCZAJgA3wCYAJcAlwCWAN8A3wCWANMA0wCWAJUA0wCVAJQAlACTANMA0wCTAJIA0wCSAJEA5wDmANMA0wDmAMwA2gDZANAA0ADZAOQA0ADkAOcA0ADnANEA0QDnAN4A0QDeAN0AGQAYAMYAxgAYAC8AxgAvAOUA5QAvAC4A5QAuAC0ALQAsAOUA5QAsACsA5QArAMAAwAArACoAwAAqACkAKQAoAMAAwAAoACcAwAAnACYAJgAlAMAAwAAlACQAwAAkAMEAwQAkACMAwQAjACIAIgAhAMEAwQAhACAAwQAgAB8AHwAeAMEAwQAeAMYAxgAeAB0AxgAdABwAHAAbAMYAxgAbABoAxgAaABkAeQB4AM4AzgB4AI8AzgCPAI4AjgCNAM4AzgCNAIwAzgCMAIsAiwCKAM4AzgCKANgA2ACKAIkA2ACJAIgAiACHANgA2ACHAIYA2ACGAIUAhQCEANgA2ACEANkA2QCEAIMA2QCDAIIAggCBANkA2QCBAIAA2QCAAH8AfwB+ANkA2QB+AH0A2QB9AOQA5AB9AHwA5AB8AHsAewB6AOQA5AB6AHkA5AB5AM4AxgDlAM4AzgDlAOQA"}};
+</script>
+<script>
+(function(){
+'use strict';
+var $ = function(id){ return document.getElementById(id); };
+var CHUNK = 5;          // ms per loudness chunk (WINDOW_US in clap.py)
+var PAGE = 6000;        // timeline window, ms
+var DEFAULTS = { ABS_MIN:600, RATIO:5, MAX_CLAP_MS:200, CLAP_END:0.2, MIN_GAP_MS:120, MAX_GAP_MS:700, QUIET_AFTER_MS:300, LOCKOUT_MS:1500 };
+var cfg = Object.assign({}, DEFAULTS);
+var params = { gain:1, adc:'xiao', upIsOn:true, battV:3.9, lowBatt:3.6, battCheck:true, playOut:true };
+// CompactAssemblyV1 geometry (mm, degrees)
+var GEO = { R:13, PRONG:11.5, TIP_HALF:2.5, TOG_LEN:13, TOG_REST:18, PUSH:74, PARK:90, RAIL_OUT:9.5, PUSH_MS:600, RETURN_MS:500, SLEW:0.5, HORN_Z:10.9, TOG_X:1.5, TOG_PIVOT_Z:-3 };
+var STATE_NAMES = ['Listening','First clap','Waiting for 2nd clap','Second clap','Confirming quiet','Rejected, waiting for quiet','Muted'];
+var DEG = Math.PI/180;
+function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+
+// ------------------------------------------------------------------ detector (port of firmware/lib/clap.py)
+function Detector(c, log){
+  this.c=c; this.log=log; this.noise=50; this.prev1=0; this.prev2=0; this.state=0;
+  this.firstOnset=0; this.clapStart=0; this.stateTime=0; this.muteUntil=-1e9; this.clapPeak=0;
+  this.lastTrig=c.ABS_MIN; this.muted=false;
+  this.sounds=[]; this.s1=null; this.s2=null;   // every sharp sound, with what the detector made of it
+}
+Detector.prototype.muteFor=function(now,ms){ this.muteUntil=now+ms; this.state=0; };
+Detector.prototype.reject=function(why,now){ this.log('reject','rejected: '+why); this.state=5; this.stateTime=now; };
+Detector.prototype.update=function(loud, now){
+  var c=this.c;
+  var trigger=Math.max(c.ABS_MIN, this.noise*c.RATIO), release=trigger*0.4;
+  var onset = loud>trigger && Math.min(this.prev1,this.prev2) < Math.floor(loud/2);
+  var quiet = loud<release;
+  if (this.state===1||this.state===3) this.clapPeak=Math.max(this.clapPeak,loud);
+  var clapOver = loud < Math.max(release, this.clapPeak*c.CLAP_END);
+  this.noise += (loud-this.noise)*0.002; if (this.noise<5) this.noise=5;
+  this.prev2=this.prev1; this.prev1=loud;
+  this.lastTrig=trigger;
+  this.muted = now < this.muteUntil;
+  if (this.muted) return false;
+  var snd=null;
+  if (onset){ this.log('sound','sound: loudness '+loud+' (needs '+Math.floor(trigger)+')'); snd={ t:now, verdict:'pending' }; this.sounds.push(snd); }
+  function v(s,txt){ if (s) s.verdict=txt; }
+  switch(this.state){
+    case 0: if (onset){ this.state=1; this.firstOnset=this.clapStart=now; this.clapPeak=loud; this.s1=snd; this.s2=null; } break;
+    case 1:
+      if (onset) v(snd,'merged');
+      if (clapOver) this.state=2; else if (now-this.clapStart>c.MAX_CLAP_MS){ v(this.s1,'too long'); this.reject('first sound lasted too long',now); }
+      break;
+    case 2:
+      if (onset && now-this.firstOnset>=c.MIN_GAP_MS){ this.state=3; this.clapStart=now; this.clapPeak=loud; this.s2=snd; }
+      else if (onset) v(snd,'too soon');
+      else if (now-this.firstOnset>c.MAX_GAP_MS){ this.log('single','single clap, ignored'); v(this.s1,'single'); this.state=0; }
+      break;
+    case 3:
+      if (onset) v(snd,'merged');
+      if (clapOver){ this.state=4; this.stateTime=now; }
+      else if (now-this.clapStart>c.MAX_CLAP_MS){ v(this.s1,'cancelled'); v(this.s2,'too long'); this.reject('second sound lasted too long',now); }
+      break;
+    case 4:
+      if (onset){ v(this.s1,'cancelled'); v(this.s2,'cancelled'); v(snd,'extra'); this.reject('third sound',now); }
+      else if (now-this.stateTime>=c.QUIET_AFTER_MS){ v(this.s1,'clap 1'); v(this.s2,'clap 2'); this.muteFor(now,c.LOCKOUT_MS); return true; }
+      break;
+    case 5:
+      if (onset) v(snd,'ignored');
+      if (!quiet) this.stateTime=now; else if (now-this.stateTime>=c.QUIET_AFTER_MS) this.state=0;
+      break;
+  }
+  return false;
+};
+
+// ------------------------------------------------------------------ motion model (servo + fork + toggle)
+function Motion(log){
+  this.log=log; this.now=0; this.horn=0; this.target=0; this.signal=false; this.power=false;
+  this.tog=GEO.TOG_REST; this.rail=0; this.railTarget=0; this.led=false; this.ledUntil=-1;
+  this.queue=[]; this.busyUntil=-1; this.moves=[]; this.external=false; this.reedTruth=null;
+}
+Motion.prototype.schedule=function(t,fn){ this.queue.push({t:t,fn:fn}); this.queue.sort(function(a,b){ return a.t-b.t; }); };
+Motion.prototype.canMove=function(t){
+  if (this.railTarget>0){ this.log('refused','manual mode: the rail cam has cut servo power, move refused'); return false; }
+  if (params.battCheck && params.battV<params.lowBatt){ this.log('refused','battery '+params.battV.toFixed(2)+' V is below '+params.lowBatt.toFixed(2)+' V, move refused'); return false; }
+  if (t<this.busyUntil){ this.log('refused','already moving, request ignored'); return false; }
+  return true;
+};
+Motion.prototype.move=function(t, hornTarget, label){
+  if (!this.canMove(t)) return false;
+  var self=this, P=GEO.PUSH_MS, R=GEO.RETURN_MS;
+  this.power=true;
+  this.schedule(t+50,function(){ self.signal=true; self.target=hornTarget; });
+  this.schedule(t+50+P,function(){ self.target=0; });
+  this.schedule(t+50+P+R,function(){ self.signal=false; self.power=false; });
+  this.busyUntil=t+50+P+R;
+  this.moves.push({t0:t,t1:t+50+P+R,dir:label});
+  return true;
+};
+Motion.prototype.flip=function(t, src){
+  var up=this.tog>=0;
+  this.log('flip', src+': reed says toggle '+(up?'UP':'DOWN')+', pushing '+(up?'DOWN':'UP'));
+  this.move(t, up?-GEO.PUSH:GEO.PUSH, up?'down':'up');
+};
+Motion.prototype.handFlip=function(){
+  this.tog = this.tog>=0 ? -1 : 1;
+  this.log('hand','toggle flipped by hand');
+};
+Motion.prototype.setRail=function(on){
+  this.railTarget = on?GEO.RAIL_OUT:0;
+  if (on){ this.queue=[]; this.signal=false; this.power=false; this.busyUntil=-1; }
+  this.log('note', on?'rail slid out: manual mode, servo power cut':'rail slid back: automatic mode');
+};
+Motion.prototype.hold=function(deg){
+  if (this.railTarget>0){ this.log('refused','manual mode: servo power is cut'); return; }
+  this.queue=[]; this.busyUntil=-1; this.power=true; this.signal=true; this.target=deg-GEO.PARK;
+  this.log('note','holding servo at '+deg+'°');
+};
+Motion.prototype.release=function(){ this.queue=[]; this.busyUntil=-1; this.signal=false; this.power=false; this.log('note','servo released (pulses off, power off)'); };
+Motion.prototype.ledFlash=function(t,ms){ this.led=true; this.ledUntil=t+ms; };
+Motion.prototype.setExternal=function(servoDeg, power, reed, led){
+  this.external=true;
+  if (servoDeg>=0){ this.signal=true; this.target=servoDeg-GEO.PARK; } else this.signal=false;
+  this.power=!!power; this.led=!!led; this.reedTruth=!!reed;
+};
+Motion.prototype.step=function(){
+  this.now+=1;
+  while (this.queue.length && this.queue[0].t<=this.now){ this.queue.shift().fn(); }
+  if (this.power && this.signal){ this.horn += clamp(this.target-this.horn, -GEO.SLEW, GEO.SLEW); }
+  this.rail += clamp(this.railTarget-this.rail, -0.03, 0.03);
+  var fork = GEO.R*Math.sin(this.horn*DEG);
+  // toggle snaps to whichever side of centre it is on
+  var free = this.tog>=0 ? GEO.TOG_REST : -GEO.TOG_REST;
+  this.tog += clamp(free-this.tog, -2.2, 2.2);
+  if (this.external && this.reedTruth!==null && Math.abs(this.horn)<20){
+    var want = this.reedTruth?1:-1;
+    if (Math.sign(this.tog)!==want) this.tog = want;     // the real reed switch wins
+  }
+  if (this.rail<3){
+    var tip=GEO.TOG_LEN*Math.sin(this.tog*DEG), U=fork+GEO.PRONG-GEO.TIP_HALF, L=fork-GEO.PRONG+GEO.TIP_HALF, y=clamp(tip,L,U);
+    if (y!==tip) this.tog = Math.asin(clamp(y/GEO.TOG_LEN,-1,1))/DEG;
+  }
+  if (this.led && this.ledUntil>=0 && this.now>=this.ledUntil){ this.led=false; this.ledUntil=-1; }
+};
+Motion.prototype.advance=function(t){ var guard=0; while(this.now<t && guard++<20000) this.step(); };
+Motion.prototype.fork=function(){ return GEO.R*Math.sin(this.horn*DEG); };
+
+// ------------------------------------------------------------------ engine: detector + motion + records
+function newRec(){ return { t:[], loud:[], trig:[], noise:[], st:[], horn:[], tog:[], pow:[], sig:[], rail:[], led:[] }; }
+function Engine(external){
+  var self=this;
+  this.external=!!external; this.ev=[]; this.n=0; this.curT=0; this.rec=newRec();
+  this.det=new Detector(cfg, function(k,txt){ self.event(k,txt); });
+  this.mot=new Motion(function(k,txt){ self.event(k,txt); });
+  this.onEvent=null;
+}
+Engine.prototype.event=function(kind,text,t){
+  var e={ t:(t===undefined?this.curT:t), kind:kind, text:text };
+  this.ev.push(e); if (this.onEvent) this.onEvent(e);
+};
+Engine.prototype.apply=function(inj){
+  var m=this.mot, t=this.curT;
+  switch(inj.type){
+    case 'flip': m.flip(t,'Flip now'); break;
+    case 'up': this.event('note','Push up pressed'); m.move(t,GEO.PUSH,'up'); break;
+    case 'down': this.event('note','Push down pressed'); m.move(t,-GEO.PUSH,'down'); break;
+    case 'hand': m.handFlip(); break;
+    case 'rail': m.setRail(inj.on); break;
+    case 'hold': m.hold(inj.deg); break;
+    case 'release': m.release(); break;
+  }
+};
+Engine.prototype.pushRec=function(t,loud,trig,noise,st){
+  var r=this.rec, m=this.mot;
+  r.t.push(t); r.loud.push(loud); r.trig.push(trig); r.noise.push(noise); r.st.push(st);
+  r.horn.push(m.horn); r.tog.push(m.tog); r.pow.push(m.power?1:0); r.sig.push(m.signal?1:0); r.rail.push(m.rail); r.led.push(m.led?1:0);
+};
+Engine.prototype.chunk=function(loud){
+  var t=this.n*CHUNK; this.curT=t;
+  if (this.det.update(loud,t)){
+    this.event('double','DOUBLE CLAP');
+    this.mot.ledFlash(t,300);
+    this.mot.flip(t,'Double clap');
+  }
+  this.mot.advance(t+CHUNK);
+  this.pushRec(t, loud, this.det.lastTrig, this.det.noise, this.det.muted?6:this.det.state);
+  this.n++;
+};
+Engine.prototype.trimBefore=function(t){
+  var r=this.rec, k=0; while(k<r.t.length && r.t[k]<t) k++;
+  if (k) for (var key in r) r[key].splice(0,k);
+  var S=this.det.sounds, q=0; while(q<S.length && S[q].t<t-PAGE) q++; if (q) S.splice(0,q);
+  var j=0; while(j<this.ev.length && this.ev[j].t<t-PAGE) j++;
+  if (j) this.ev.splice(0,j);
+};
+
+// ------------------------------------------------------------------ audio: analysis + test sounds
+var actx=null;
+function getCtx(){ if (!actx){ var C=window.AudioContext||window.webkitAudioContext; if (C) actx=new C(); } return actx; }
+
+function rng(seed){ var s=(seed>>>0)||1; return function(){ s^=s<<13; s>>>=0; s^=s>>>17; s^=s<<5; s>>>=0; return s/4294967296; }; }
+function gauss(r){ var u=1-r(), v=r(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+
+// Per-ms min/max for drawing, and per-5 ms ADC loudness for the detector.
+function analyse(samples, sr){
+  var nMs=Math.floor(samples.length*1000/sr), mm=new Float32Array(nMs*2);
+  for (var ms=0; ms<nMs; ms++){
+    var a=Math.floor(ms*sr/1000), b=Math.min(samples.length,Math.floor((ms+1)*sr/1000)), lo=1, hi=-1;
+    for (var i=a;i<b;i++){ var v=samples[i]; if(v<lo)lo=v; if(v>hi)hi=v; }
+    if (b<=a){ lo=0; hi=0; }
+    mm[ms*2]=lo; mm[ms*2+1]=hi;
+  }
+  return { mm:mm, loud:loudness(samples,sr) };
+}
+function adcStep(sr){ return params.adc==='xiao' ? Math.max(1,Math.round(sr/15000)) : 1; }
+function loudness(samples, sr){
+  var per=Math.round(sr*CHUNK/1000), n=Math.floor(samples.length/per), out=new Int16Array(n), step=adcStep(sr), g=params.gain, r=rng(1234);
+  for (var c=0;c<n;c++){
+    var lo=4095, hi=0, base=c*per;
+    for (var i=0;i<per;i+=step){
+      var v = samples[base+i]*g + gauss(r)*0.003;            // + MAX4466 self-noise
+      var adc = clamp(Math.round(2047.5 + v*2047.5), 0, 4095);
+      if (adc<lo) lo=adc; if (adc>hi) hi=adc;
+    }
+    out[c]=hi-lo;
+  }
+  return out;
+}
+
+var SR=22050;
+function buf(sec){ return new Float32Array(Math.round(sec*SR)); }
+function addNoise(b,level,r){ for (var i=0;i<b.length;i++) b[i]+=gauss(r)*level; }
+function addClap(b,t,amp,r,o){
+  o=o||{}; var i0=Math.round(t*SR), tau=(o.tau||0.007)*SR, tail=(o.tail||0.045)*SR, n=Math.round(0.3*SR), att=SR*0.0006, prev=0, hp=o.hp||0.6;
+  for (var k=0;k<n && i0+k<b.length;k++){
+    var env=(k<att?k/att:1)*(Math.exp(-k/tau)+0.12*Math.exp(-k/tail));
+    var x=gauss(r), y=x-prev*hp; prev=x;
+    b[i0+k]+=amp*env*y*0.33;
+  }
+}
+function addThud(b,t,amp,f,tau,r,click){
+  var i0=Math.round(t*SR), n=Math.round(Math.min(1.5,tau*7)*SR);
+  for (var k=0;k<n && i0+k<b.length;k++){
+    var tt=k/SR, env=Math.exp(-tt/tau)*(k<SR*0.002?k/(SR*0.002):1);
+    var ff=f*(1+0.4*Math.exp(-tt/0.03));
+    b[i0+k]+=amp*env*Math.sin(2*Math.PI*ff*tt) + (click&&k<SR*0.006? gauss(r)*amp*click*Math.exp(-k/(SR*0.0015)) : 0);
+  }
+}
+function addSpeech(b,t0,t1,amp,r){
+  var t=t0;
+  while (t<t1){
+    var dur=0.2+r()*0.22, f0=105+r()*40, a=amp*(0.55+r()*0.6), i0=Math.round(t*SR), n=Math.round(dur*SR), ph=0, form=500+r()*1200;
+    for (var k=0;k<n && i0+k<b.length;k++){
+      var x=k/n, env=x<0.25?0.5-0.5*Math.cos(Math.PI*x/0.25):(x>0.8?0.5+0.5*Math.cos(Math.PI*(x-0.8)/0.2):1);
+      ph+=2*Math.PI*f0/SR;
+      var s=0; for (var h=1;h<=12;h++){ var hf=f0*h; s+=Math.sin(ph*h)/h*Math.exp(-Math.pow((hf-form)/700,2)); }
+      b[i0+k]+=a*env*(s*0.7+gauss(r)*0.05);
+    }
+    t+=dur+0.01+r()*0.06;
+    if (r()<0.12) t+=0.25+r()*0.3;   // pause between phrases
+  }
+}
+function addMusic(b,t0,t1,r){
+  for (var t=t0;t<t1;t+=0.5) addThud(b,t,0.55,52,0.12,r,0.6);              // kick on every beat (120 bpm)
+  for (var t2=t0+0.25;t2<t1;t2+=0.5) addClap(b,t2,0.18,r,{tau:0.004,tail:0.01,hp:0.95}); // hi-hat off-beat
+  var notes=[220,277.2,329.6], i0=Math.round(t0*SR), i1=Math.min(b.length,Math.round(t1*SR));
+  for (var i=i0;i<i1;i++){ var tt=i/SR, s=0; for (var j=0;j<3;j++) s+=Math.sin(2*Math.PI*notes[j]*tt); b[i]+=0.05*s*(0.7+0.3*Math.sin(2*Math.PI*0.5*tt)); }
+}
+function finish(b){ for (var i=0;i<b.length;i++) b[i]=clamp(b[i],-1,1); return b; }
+
+var PRESETS = [
+  { id:'double', name:'Double clap', ds:'Two claps 0.45 s apart', make:function(r){ var b=buf(6); addNoise(b,0.004,r); addClap(b,1.0,1,r); addClap(b,1.45,0.95,r); return b; } },
+  { id:'twice', name:'Double clap, twice', ds:'Off at about 2 s, back on at about 4.5 s', make:function(r){ var b=buf(6); addNoise(b,0.004,r); addClap(b,1.0,1,r); addClap(b,1.45,0.95,r); addClap(b,3.7,1,r); addClap(b,4.15,0.9,r); return b; } },
+  { id:'single', name:'Single clap', ds:'One clap, then quiet', make:function(r){ var b=buf(6); addNoise(b,0.004,r); addClap(b,1.2,1,r); return b; } },
+  { id:'triple', name:'Three quick claps', ds:'0.28 s apart, a round of applause', make:function(r){ var b=buf(6); addNoise(b,0.004,r); addClap(b,1.0,1,r); addClap(b,1.28,0.95,r); addClap(b,1.56,0.95,r); return b; } },
+  { id:'slow', name:'Slow claps', ds:'0.9 s apart, too slow', make:function(r){ var b=buf(6); addNoise(b,0.004,r); addClap(b,1.0,1,r); addClap(b,1.9,1,r); return b; } },
+  { id:'far', name:'Quiet claps from across the room', ds:'Double clap at a fifth of the level', make:function(r){ var b=buf(6); addNoise(b,0.004,r); addClap(b,1.0,0.2,r); addClap(b,1.45,0.19,r); return b; } },
+  { id:'snaps', name:'Two finger snaps', ds:'Short and bright', make:function(r){ var b=buf(6); addNoise(b,0.004,r); addClap(b,1.0,0.7,r,{tau:0.0025,tail:0.02,hp:0.95}); addClap(b,1.5,0.65,r,{tau:0.0025,tail:0.02,hp:0.95}); return b; } },
+  { id:'tv', name:'Double clap over a loud TV', ds:'Background raises the trigger level', make:function(r){ var b=buf(6); addNoise(b,0.02,r); addSpeech(b,0,6,0.22,r); addClap(b,3.0,1,r); addClap(b,3.45,0.95,r); return b; } },
+  { id:'knock', name:'Two knocks on a desk', ds:'Short thuds, can look like claps', make:function(r){ var b=buf(6); addNoise(b,0.004,r); addThud(b,1.0,0.6,140,0.03,r,0.5); addThud(b,1.42,0.55,140,0.03,r,0.5); return b; } },
+  { id:'door', name:'Door slam', ds:'One loud bang with a long rattle', make:function(r){ var b=buf(6); addNoise(b,0.004,r); addClap(b,1.2,1.1,r,{tau:0.16,tail:0.35,hp:0.3}); addThud(b,1.2,0.45,70,0.25,r,0.6); return b; } },
+  { id:'talk', name:'Talking nearby', ds:'Speech for 5 s', make:function(r){ var b=buf(6); addNoise(b,0.004,r); addSpeech(b,0.4,5.6,0.35,r); return b; } },
+  { id:'music', name:'Music with a beat', ds:'Kick drum at 120 bpm, can fool it', make:function(r){ var b=buf(6); addNoise(b,0.004,r); addMusic(b,0.3,5.8,r); return b; } },
+  { id:'silence', name:'Room tone only', ds:'Quiet room, for the manual inputs', make:function(r){ var b=buf(6); addNoise(b,0.004,r); return b; } }
+];
+
+// ------------------------------------------------------------------ app state
+var app = {
+  engine:'sim',          // 'sim' | 'xiao'
+  source:'preset',       // 'preset' | 'upload' | 'record' | 'live'
+  clip:null,             // { name, samples, sr, mm, loud, audioBuf, durMs }
+  presetId:'double',
+  plan:null, injections:[],
+  playing:false, playMs:0, playStartHead:0, playStartCtx:0, playStartPerf:0, srcNode:null,
+  rt:null,               // realtime engine (live mic or XIAO)
+  rtT0:0, live:null,     // { stream, node, page samples ... }
+  clipOverlayAt:null,    // XIAO mode: when the clip started playing, ms on the realtime clock
+  logRendered:0, dirtyLog:true
+};
+
+function mode(){ // what drives the display
+  if (app.engine==='xiao') return 'xiao';
+  if (app.source==='live' || (app.source==='record' && app.live && app.live.recording)) return 'live';
+  return 'plan';
+}
+
+// ------------------------------------------------------------------ plan (clip mode)
+function computePlan(){
+  if (!app.clip) { app.plan=null; return; }
+  var e=new Engine(false), inj=app.injections.slice().sort(function(a,b){ return a.t-b.t; }), k=0;
+  var lastInj = inj.length? inj[inj.length-1].t : 0;
+  var n=Math.max(app.clip.loud.length, Math.ceil((lastInj+2600)/CHUNK));
+  var r=rng(99);
+  for (var i=0;i<n;i++){
+    var t=i*CHUNK; e.curT=t;
+    while (k<inj.length && inj[k].t<=t){ e.apply(inj[k]); k++; }
+    var loud = i<app.clip.loud.length ? app.clip.loud[i] : Math.round(22+gauss(r)*5);
+    e.chunk(Math.max(0,loud));
+  }
+  e.durMs=n*CHUNK;
+  app.plan=e; app.dirtyLog=true;
+}
+function planIndex(ms){ return clamp(Math.floor(ms/CHUNK),0,app.plan.rec.t.length-1); }
+
+function outcomeFor(loudArr){ // quick run for preset pills
+  var e=new Engine(false); e.mot.log=function(){}; e.det.log=function(){};
+  var flips=0; e.event=function(k){ if(k==='double') flips++; };
+  for (var i=0;i<loudArr.length;i++) e.chunk(loudArr[i]);
+  return flips;
+}
+
+// ------------------------------------------------------------------ clip loading
+var presetCache={};
+function loadPreset(id){
+  var p=PRESETS.filter(function(x){ return x.id===id; })[0]; if (!p) return;
+  if (!presetCache[id]) presetCache[id]=p.make(rng(7+id.length*31+id.charCodeAt(0)));
+  setClip({ name:p.name, samples:presetCache[id], sr:SR });
+  app.presetId=id; renderPresets();
+}
+function setClip(c){
+  stopPlayback();
+  var a=analyse(c.samples,c.sr);
+  c.mm=a.mm; c.loud=a.loud; c.durMs=Math.floor(c.samples.length*1000/c.sr); c.audioBuf=null;
+  app.clip=c; app.injections=[]; app.playMs=0;
+  $('srcName').textContent=c.name; $('srcDur').textContent=(c.durMs/1000).toFixed(1)+' s';
+  computePlan(); refreshAll();
+}
+function reanalyse(){
+  if (app.clip){ app.clip.loud=loudness(app.clip.samples,app.clip.sr); computePlan(); }
+  presetOutcomes(); refreshAll();
+}
+function decodeFile(file){
+  var ctx=getCtx();
+  if (!ctx){ logNote('This browser has no Web Audio, so it cannot read audio files.'); return; }
+  var fr=new FileReader();
+  fr.onload=function(){
+    ctx.decodeAudioData(fr.result.slice(0), function(ab){
+      var len=Math.min(ab.length, ab.sampleRate*60), mono=new Float32Array(Math.max(len, Math.round(ab.sampleRate*6)));
+      for (var ch=0; ch<ab.numberOfChannels; ch++){ var d=ab.getChannelData(ch); for (var i=0;i<len;i++) mono[i]+=d[i]/ab.numberOfChannels; }
+      setClip({ name:file.name, samples:mono, sr:ab.sampleRate });
+      if (ab.length>len) logNote('Only the first 60 s of '+file.name+' was loaded.');
+      logNote('Loaded '+file.name+' ('+(ab.length/ab.sampleRate).toFixed(1)+' s, '+ab.sampleRate+' Hz).');
+    }, function(){ logNote('Could not decode '+file.name+'. Try a wav or mp3 file.'); });
+  };
+  fr.readAsArrayBuffer(file);
+}
+
+// ------------------------------------------------------------------ playback
+function clipAudioBuffer(){
+  var c=app.clip, ctx=getCtx(); if (!c||!ctx) return null;
+  if (!c.audioBuf){ c.audioBuf=ctx.createBuffer(1,c.samples.length,c.sr); c.audioBuf.copyToChannel ? c.audioBuf.copyToChannel(c.samples,0) : c.audioBuf.getChannelData(0).set(c.samples); }
+  return c.audioBuf;
+}
+function startAudio(fromMs){
+  var ctx=getCtx(); if (!ctx||!params.playOut||!app.clip) return false;
+  try{
+    if (ctx.state==='suspended') ctx.resume();
+    var b=clipAudioBuffer(); if (fromMs/1000>=b.duration) return false;
+    var s=ctx.createBufferSource(); s.buffer=b; s.connect(ctx.destination); s.start(0, fromMs/1000);
+    app.srcNode=s; return true;
+  }catch(e){ return false; }
+}
+function stopAudio(){ if (app.srcNode){ try{ app.srcNode.stop(); }catch(e){} app.srcNode=null; } }
+function play(){
+  var m=mode();
+  if (m==='live') return;
+  if (m==='xiao'){
+    if (!app.clip) return;
+    stopAudio(); app.clipOverlayAt=rtNow();
+    var ctx=getCtx(); if (ctx && ctx.state==='suspended') ctx.resume();
+    if (!startAudio(0)) logNote('Sound output is off or blocked, so the XIAO will not hear the clip.');
+    app.playing=true; app.playStartPerf=performance.now(); syncPlay(); return;
+  }
+  if (!app.plan) return;
+  if (app.playMs>=app.plan.durMs-CHUNK) app.playMs=0;
+  app.playStartHead=app.playMs;
+  app.usingCtx=startAudio(app.playMs);
+  if (app.usingCtx) app.playStartCtx=actx.currentTime;
+  app.playStartPerf=performance.now();
+  app.playing=true; syncPlay();
+}
+function stopPlayback(){ stopAudio(); app.playing=false; syncPlay(); }
+function syncPlay(){
+  var m=mode(), b=$('playBtn');
+  b.textContent = app.playing ? 'Pause' : (m==='xiao' ? 'Play to XIAO' : 'Play');
+  b.disabled = m==='live' || (m==='xiao' && !app.clip);
+  $('restartBtn').disabled = m!=='plan';
+}
+function seek(ms){
+  var was=app.playing; stopAudio(); app.playing=false;
+  app.playMs=clamp(ms,0,app.plan?app.plan.durMs-CHUNK:0);
+  if (was) play(); else syncPlay();
+  refreshAll();
+}
+function tickPlayback(){
+  if (!app.playing) return;
+  if (mode()==='plan'){
+    var el = app.usingCtx ? (actx.currentTime-app.playStartCtx)*1000 : performance.now()-app.playStartPerf;
+    app.playMs = app.playStartHead + el;
+    if (app.playMs>=app.plan.durMs-CHUNK){ app.playMs=app.plan.durMs-CHUNK; stopPlayback(); }
+  } else if (mode()==='xiao'){
+    if (app.clip && rtNow()-app.clipOverlayAt > app.clip.durMs+200){ app.playing=false; syncPlay(); }
+  }
+}
+
+// ------------------------------------------------------------------ manual inputs
+function manual(inj){
+  var m=mode();
+  if (m==='xiao'){ xiaoManual(inj); return; }
+  if (m==='live'){ app.rt.curT=app.rt.n*CHUNK; app.rt.apply(inj); return; }
+  if (!app.plan) return;
+  inj.t=Math.round(app.playMs/CHUNK)*CHUNK;
+  app.injections.push(inj); computePlan();
+  if (!app.playing) play();
+  refreshAll();
+}
+
+// ------------------------------------------------------------------ live microphone (and recording)
+var pp=document.permissionsPolicy||document.featurePolicy;
+function policyAllows(f){ try{ return !(pp && pp.allowsFeature && !pp.allowsFeature(f)); }catch(e){ return true; } }
+var inFrame = (function(){ try{ return window.self!==window.top; }catch(e){ return true; } })();
+var micOK = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) && policyAllows('microphone') && window.isSecureContext!==false;
+var serialOK = !!navigator.serial && policyAllows('serial');
+
+function rtNow(){ return performance.now()-app.rtT0; }
+function startRealtime(external){
+  app.rt=new Engine(external); app.rtT0=performance.now(); app.rt.onEvent=function(){ app.dirtyLog=true; };
+  app.rtWave={ mm:[], base:0 };         // per-ms min/max of the live page
+  app.logRendered=0; app.dirtyLog=true; clearLogEl();
+}
+function stopLive(){
+  var L=app.live; if (!L) return;
+  try{ L.node.disconnect(); L.srcNode.disconnect(); }catch(e){}
+  try{ L.stream.getTracks().forEach(function(t){ t.stop(); }); }catch(e){}
+  app.live=null; syncLiveButtons();
+}
+function startMic(recordMs){
+  if (!micOK){ logNote('The microphone is blocked here. Open bench/index.html from your computer in Chrome to use it.'); return; }
+  var ctx=getCtx(); if (!ctx) return;
+  ctx.resume();
+  navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false } }).then(function(stream){
+    stopPlayback(); stopLive();
+    app.source = recordMs ? 'record' : 'live';
+    var srcNode=ctx.createMediaStreamSource(stream), node=ctx.createScriptProcessor(2048,1,1), mute=ctx.createGain(); mute.gain.value=0;
+    srcNode.connect(node); node.connect(mute); mute.connect(ctx.destination);
+    var sr=ctx.sampleRate, per=Math.round(sr*CHUNK/1000), msPer=sr/1000;
+    var L={ stream:stream, srcNode:srcNode, node:node, sr:sr, acc:new Float32Array(per), accN:0, msAcc:[1,-1], msN:0, recording:!!recordMs, recBuf:recordMs?new Float32Array(Math.round(sr*recordMs/1000)):null, recN:0, lo:4095, hi:0, r:rng(5) };
+    app.live=L; startRealtime(false);
+    var step=adcStep(sr), k=0;
+    node.onaudioprocess=function(ev){
+      var d=ev.inputBuffer.getChannelData(0), e=app.rt, g=params.gain;
+      for (var i=0;i<d.length;i++){
+        var v=d[i];
+        if (L.recBuf && L.recN<L.recBuf.length) L.recBuf[L.recN++]=v;
+        if (v<L.msAcc[0]) L.msAcc[0]=v; if (v>L.msAcc[1]) L.msAcc[1]=v;
+        if (++L.msN>=msPer){ app.rtWave.mm.push(L.msAcc[0],L.msAcc[1]); L.msAcc=[1,-1]; L.msN=0; }
+        if ((k++%step)===0){ var adc=clamp(Math.round(2047.5+(v*g+gauss(L.r)*0.003)*2047.5),0,4095); if(adc<L.lo)L.lo=adc; if(adc>L.hi)L.hi=adc; }
+        if (++L.accN>=per){ e.chunk(L.hi-L.lo); L.lo=4095; L.hi=0; L.accN=0; }
+      }
+      // keep one 6 s page of history
+      var page=Math.floor(e.n*CHUNK/PAGE)*PAGE;
+      if (page>app.rtWave.base){ var drop=(page-app.rtWave.base)*2; app.rtWave.mm.splice(0,drop); app.rtWave.base=page; e.trimBefore(page); }
+      if (L.recBuf){
+        $('recMeter').style.width=(100*L.recN/L.recBuf.length).toFixed(1)+'%';
+        if (L.recN>=L.recBuf.length){
+          var rec=L.recBuf, rsr=L.sr; stopLive();
+          var t=new Date();
+          setClip({ name:'Recording '+t.toLocaleTimeString([], {hour:'numeric',minute:'2-digit',second:'2-digit'}), samples:rec, sr:rsr });
+          logNote('Recording finished. Press Play to run it through the detector.');
+          $('recMeter').style.width='0%';
+        }
+      }
+    };
+    syncLiveButtons(); refreshAll();
+    if (recordMs) logNote('Recording 6 s from the microphone...'); else logNote('Listening on the microphone.');
+  }).catch(function(err){
+    logNote('Microphone unavailable: '+(err && err.message ? err.message : err)+'. In the claude.ai viewer the microphone is blocked; open the page from your computer.');
+  });
+}
+function syncLiveButtons(){
+  var L=app.live;
+  $('liveBtn').textContent = L && !L.recording ? 'Stop listening' : 'Start listening';
+  $('recBtn').textContent = L && L.recording ? 'Recording...' : 'Record 6 seconds';
+  $('recBtn').disabled = !micOK || !!(L && L.recording);
+  $('liveBtn').disabled = !micOK;
+}
+
+// ------------------------------------------------------------------ XIAO over Web Serial
+var xiao={ port:null, reader:null, writer:null, connected:false, hello:false, batt:null, buf:'' };
+function xiaoChip(){
+  var c=$('xChip');
+  if (xiao.connected && xiao.hello){ c.textContent='connected'; c.className='chip live'; }
+  else if (xiao.connected){ c.textContent='port open, waiting'; c.className='chip sim'; }
+  else { c.textContent='not connected'; c.className='chip off'; }
+  $('xConnect').textContent = xiao.connected ? 'Disconnect' : 'Connect XIAO';
+  $('xReset').disabled = !xiao.connected;
+}
+function xiaoConnect(){
+  if (xiao.connected){ xiaoDisconnect(); return; }
+  if (!serialOK){ logNote(navigator.serial ? 'USB serial is blocked in this viewer. Open bench/index.html from your computer in Chrome.' : 'This browser has no Web Serial. Use Chrome or Edge on a computer.'); return; }
+  navigator.serial.requestPort().then(function(port){
+    return port.open({ baudRate:115200 }).then(function(){
+      xiao.port=port; xiao.connected=true; xiao.hello=false;
+      var dec=new TextDecoderStream(); xiao.readDone=port.readable.pipeTo(dec.writable).catch(function(){});
+      xiao.reader=dec.readable.getReader();
+      var enc=new TextEncoderStream(); xiao.writeDone=enc.readable.pipeTo(port.writable).catch(function(){});
+      xiao.writer=enc.writable.getWriter();
+      setEngine('xiao');
+      startRealtime(true); xiaoChip();
+      logNote('Serial port open. Waiting for the bench program to say HELLO (press Restart program if nothing shows up).');
+      readLoop(); xiaoSend('status');
+    });
+  }).catch(function(e){ if (e && e.name!=='NotFoundError') logNote('Could not open the port: '+e.message); });
+}
+function readLoop(){
+  xiao.reader.read().then(function(res){
+    if (res.done){ xiaoGone(); return; }
+    xiao.buf+=res.value; var i;
+    while ((i=xiao.buf.indexOf('\n'))>=0){ var line=xiao.buf.slice(0,i).replace(/\r$/,''); xiao.buf=xiao.buf.slice(i+1); if (line) onLine(line); }
+    readLoop();
+  }).catch(function(){ xiaoGone(); });
+}
+function xiaoGone(){ if (!xiao.connected) return; xiao.connected=false; xiao.hello=false; xiaoChip(); logNote('XIAO disconnected.'); }
+function xiaoDisconnect(){
+  var x=xiao; x.connected=false;
+  Promise.resolve().then(function(){ return x.reader && x.reader.cancel(); }).catch(function(){})
+    .then(function(){ return x.writer && x.writer.close(); }).catch(function(){})
+    .then(function(){ return Promise.all([x.readDone,x.writeDone]); }).catch(function(){})
+    .then(function(){ return x.port && x.port.close(); }).catch(function(){})
+    .then(function(){ x.port=null; x.reader=null; x.writer=null; xiaoChip(); logNote('Disconnected from the XIAO.'); });
+}
+function xiaoSend(cmd){
+  if (!xiao.writer){ logNote('Connect the XIAO first.'); return; }
+  xiao.writer.write(cmd+'\n').catch(function(){});
+  if (cmd!=='status' && app.rt) app.rt.event('tx','sent: '+cmd, rtNow());
+}
+function xiaoManual(inj){
+  switch(inj.type){
+    case 'flip': xiaoSend('flip'); break;
+    case 'up': xiaoSend('up'); break;
+    case 'down': xiaoSend('down'); break;
+    case 'hold': xiaoSend('angle '+inj.deg); break;
+    case 'release': xiaoSend('release'); break;
+    case 'hand': logNote('Flip the real switch by hand; the reed switch will report it.'); break;
+    case 'rail': logNote('Slide the real rail; the cam cuts the servo power.'); break;
+  }
+}
+function onLine(line){
+  var e=app.rt, t=rtNow(); if (!e) return;
+  var p=line.split(',');
+  switch(p[0]){
+    case 'HELLO': xiao.hello=true; xiaoChip(); e.event('note','XIAO bench program running ('+p.slice(1).join(' ')+')', t); break;
+    case 'L':
+      if (p.length<8) break;
+      var trig=+p[1], noise=+p[2], st=+p[3];
+      for (var j=0;j<4;j++){
+        var tj=t-(3-j)*CHUNK; e.curT=tj;
+        e.det.update(+p[4+j], tj);            // shadow copy of the board's detector, to label each sound
+        e.mot.advance(tj); e.pushRec(tj, +p[4+j], trig, noise, st);
+      }
+      var page=Math.floor(t/PAGE)*PAGE; if (e.rec.t.length && e.rec.t[0]<page) e.trimBefore(page);
+      break;
+    case 'S':
+      e.mot.setExternal(+p[1], +p[2], +p[3], +p[4]);
+      xiao.batt=(+p[5])/1000;
+      break;
+    case 'D': e.event('double','DOUBLE CLAP (heard by the XIAO)', t); break;
+    case 'E':
+      var txt=p.slice(1).join(','), kind='note';
+      if (/^sound:/.test(txt)) kind='sound'; else if (/rejected/.test(txt)) kind='reject'; else if (/single clap/.test(txt)) kind='single';
+      else if (/^flip/.test(txt)) kind='flip'; else if (/refused|busy|low battery/.test(txt)) kind='refused';
+      e.event(kind, txt, t); break;
+    default: e.event('raw', line, t);
+  }
+}
+
+// ------------------------------------------------------------------ current view state
+function view(){
+  var m=mode(), v;
+  if (m==='plan' && app.plan){
+    var r=app.plan.rec, i=planIndex(app.playMs);
+    v={ t:app.playMs, loud:r.loud[i], trig:r.trig[i], noise:r.noise[i], st:r.st[i], horn:r.horn[i], tog:r.tog[i], pow:r.pow[i], sig:r.sig[i], rail:r.rail[i], led:r.led[i] };
+  } else if (app.rt){
+    var e=app.rt, R=e.rec, n=R.t.length-1, mo=e.mot;
+    v={ t:m==='xiao'?rtNow():e.n*CHUNK, loud:n>=0?R.loud[n]:0, trig:e.det.lastTrig, noise:e.det.noise, st:n>=0?R.st[n]:0, horn:mo.horn, tog:mo.tog, pow:mo.power?1:0, sig:mo.signal?1:0, rail:mo.rail, led:mo.led?1:0 };
+  } else {
+    v={ t:0, loud:0, trig:cfg.ABS_MIN, noise:50, st:0, horn:0, tog:GEO.TOG_REST, pow:0, sig:0, rail:0, led:0 };
+  }
+  v.fork=GEO.R*Math.sin(v.horn*DEG);
+  v.servoDeg=Math.round(GEO.PARK+v.horn);
+  v.us=Math.round(500+1900*v.servoDeg/180);
+  v.up=v.tog>=0; v.reed=v.up;
+  v.light = v.up===params.upIsOn;
+  v.batt = (m==='xiao' && xiao.batt!==null) ? xiao.batt : params.battV;
+  return v;
+}
+
+// ------------------------------------------------------------------ 3D scene
+var vp=$('viewport'), canvas=$('scene');
+var renderer=new THREE.WebGLRenderer({ canvas:canvas, antialias:true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+var scene=new THREE.Scene(); scene.background=new THREE.Color(0x0b0f12);
+var cam=new THREE.PerspectiveCamera(38,1,1,3000);
+scene.add(new THREE.HemisphereLight(0xffffff,0x334048,0.75));
+var dl=new THREE.DirectionalLight(0xffffff,0.65); dl.position.set(80,120,160); scene.add(dl);
+var dl2=new THREE.DirectionalLight(0xffffff,0.25); dl2.position.set(-120,-40,60); scene.add(dl2);
+
+function decodeMesh(m){
+  function b64(s){ var bin=atob(s), u=new Uint8Array(bin.length); for (var i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i); return u; }
+  var g=new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(b64(m.v).buffer),3));
+  g.setIndex(new THREE.BufferAttribute(new Uint16Array(b64(m.i).buffer),1));
+  var solid=g.toNonIndexed(); solid.computeVertexNormals();
+  return { solid:solid, edges:new THREE.EdgesGeometry(g,28) };
+}
+function part(name, color, opts){
+  opts=opts||{};
+  var d=decodeMesh(MESH[name]), grp=new THREE.Group();
+  var mat=new THREE.MeshLambertMaterial({ color:color, transparent:!!opts.opacity, opacity:opts.opacity||1, depthWrite:!opts.opacity, side:opts.opacity?THREE.DoubleSide:THREE.FrontSide });
+  var mesh=new THREE.Mesh(d.solid,mat); grp.add(mesh);
+  var edges=new THREE.LineSegments(d.edges,new THREE.LineBasicMaterial({ color:opts.edge||0x000000, transparent:true, opacity:opts.edgeOpacity||0.35 }));
+  grp.add(edges); grp.userData.mat=mat;
+  return grp;
+}
+function boxMesh(w,h,d,color,x,y,z){ var m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), new THREE.MeshLambertMaterial({ color:color })); m.position.set(x,y,z); return m; }
+
+// wall, faceplate, toggle
+var wall=new THREE.Mesh(new THREE.PlaneGeometry(260,300), new THREE.MeshLambertMaterial({ color:0x8d877c }));
+wall.position.set(10,0,-5.2); scene.add(wall);
+scene.add(boxMesh(70,115,5,0xe9e4d8, GEO.TOG_X,0,-2.6));
+scene.add(boxMesh(11,25,0.6,0x2a2622, GEO.TOG_X,0,0.2));
+var togPivot=new THREE.Group(); togPivot.position.set(GEO.TOG_X,0,GEO.TOG_PIVOT_Z); scene.add(togPivot);
+var togLever=boxMesh(6,2*GEO.TIP_HALF,10.5,0xf6f2e6,0,0,2.5+5.25); togPivot.add(togLever);
+var togCap=new THREE.Mesh(new THREE.CylinderGeometry(GEO.TIP_HALF,GEO.TIP_HALF,6,16), new THREE.MeshLambertMaterial({ color:0xf6f2e6 }));
+togCap.rotation.z=Math.PI/2; togCap.position.set(0,0,GEO.TOG_LEN); togPivot.add(togCap);
+
+// printed parts from CompactAssemblyV1.3mf
+var railBase=part('Rail base',0x7d8a93,{edgeOpacity:0.5}); scene.add(railBase);
+var slide=new THREE.Group(); scene.add(slide);
+var housing=part('Housing',0x9fb6c6,{opacity:0.16,edge:0xbcd2df,edgeOpacity:0.55}); slide.add(housing);
+var lid=part('Lid',0x9fb6c6,{opacity:0.2,edge:0xbcd2df,edgeOpacity:0.5}); lid.visible=false; slide.add(lid);
+var forkG=new THREE.Group(); slide.add(forkG);
+var fork=part('Fork slider',0x1fa3b0,{edgeOpacity:0.45}); forkG.add(fork);
+var hornPivot=new THREE.Group(); hornPivot.position.set(0,0,GEO.HORN_Z); slide.add(hornPivot);
+var horn=part('Horn arm',0xf2f2ee,{edgeOpacity:0.35}); horn.position.set(0,0,-GEO.HORN_Z); hornPivot.add(horn);
+var pin=new THREE.Mesh(new THREE.CylinderGeometry(1.5,1.5,5.4,12), new THREE.MeshLambertMaterial({ color:0xc9a24a }));
+pin.rotation.z=Math.PI/2; pin.position.set(9.1,0,GEO.R); hornPivot.add(pin);
+// MG90S reference body (not in the 3MF)
+var servoMat=new THREE.MeshLambertMaterial({ color:0x2b4c7e, emissive:0x000000 });
+var servoBody=new THREE.Mesh(new THREE.BoxGeometry(22.5,22.8,12.2), servoMat); servoBody.position.set(23.75,5.4,GEO.HORN_Z); slide.add(servoBody);
+var servoTabs=new THREE.Mesh(new THREE.BoxGeometry(2.5,32.3,12.2), servoMat); servoTabs.position.set(17.5,5.4,GEO.HORN_Z); slide.add(servoTabs);
+var shaft=new THREE.Mesh(new THREE.CylinderGeometry(2.4,2.4,2.8,16), new THREE.MeshLambertMaterial({ color:0xdddddd })); shaft.rotation.z=Math.PI/2; shaft.position.set(11.1,0,GEO.HORN_Z); slide.add(shaft);
+
+var tagDefs=[
+  { obj:togCap, off:new THREE.Vector3(-6,0,2), text:'Toggle' },
+  { obj:fork, off:new THREE.Vector3(1.5,15,9.5), text:'Fork', local:true },
+  { obj:servoBody, off:new THREE.Vector3(0,12,0), text:'MG90S' },
+  { obj:railBase, off:new THREE.Vector3(21,-38,4), text:'Rail', local:true }
+];
+var tagsEl=$('tags');
+tagDefs.forEach(function(t){ t.el=document.createElement('div'); t.el.className='tag'; t.el.textContent=t.text; tagsEl.appendChild(t.el); });
+
+var orbit={ theta:2.35, phi:1.18, r:175, target:new THREE.Vector3(16,0,8) };
+var VIEWS={ iso:{theta:2.35,phi:1.18,r:175}, side:{theta:Math.PI/2,phi:Math.PI/2,r:165}, front:{theta:Math.PI,phi:Math.PI/2,r:190} };
+function applyOrbit(){
+  var sp=Math.sin(orbit.phi);
+  // phi is measured from +Y (up the wall); theta=PI looks straight at the wall from the room
+  cam.position.set(orbit.target.x+orbit.r*sp*Math.sin(orbit.theta), orbit.target.y+orbit.r*Math.cos(orbit.phi), orbit.target.z-orbit.r*sp*Math.cos(orbit.theta));
+  cam.up.set(0,1,0); cam.lookAt(orbit.target); needs3D=true;
+}
+function setView(name){
+  var v=VIEWS[name]; orbit.theta=v.theta; orbit.phi=v.phi; orbit.r=v.r; applyOrbit();
+  ['vIso','vSide','vFront'].forEach(function(id){ $(id).setAttribute('aria-pressed', String(id==='v'+name.charAt(0).toUpperCase()+name.slice(1))); });
+}
+var needs3D=true;
+var ptrs=new Map(), lastPinch=0;
+canvas.addEventListener('pointerdown',function(e){ canvas.setPointerCapture(e.pointerId); ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY}); });
+canvas.addEventListener('pointermove',function(e){
+  if (!ptrs.has(e.pointerId)) return;
+  var prev=ptrs.get(e.pointerId); ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if (ptrs.size===1){
+    orbit.theta+=(e.clientX-prev.x)*0.008;
+    orbit.phi=clamp(orbit.phi-(e.clientY-prev.y)*0.008,0.08,Math.PI-0.08);
+    ['vIso','vSide','vFront'].forEach(function(id){ $(id).setAttribute('aria-pressed','false'); });
+  } else if (ptrs.size===2){
+    var p=Array.from(ptrs.values()), d=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y);
+    if (lastPinch) orbit.r=clamp(orbit.r*lastPinch/d,60,600); lastPinch=d;
+  }
+  applyOrbit();
+});
+function endPtr(e){ ptrs.delete(e.pointerId); if (ptrs.size<2) lastPinch=0; }
+canvas.addEventListener('pointerup',endPtr); canvas.addEventListener('pointercancel',endPtr);
+canvas.addEventListener('wheel',function(e){ e.preventDefault(); orbit.r=clamp(orbit.r*(1+Math.sign(e.deltaY)*0.08),60,600); applyOrbit(); },{ passive:false });
+function resize3D(){ var w=vp.clientWidth, h=vp.clientHeight; renderer.setSize(w,h,false); cam.aspect=w/Math.max(h,1); cam.updateProjectionMatrix(); needs3D=true; }
+new ResizeObserver(resize3D).observe(vp);
+
+var lastPose='';
+function render3D(v){
+  var pose=[v.horn.toFixed(2),v.tog.toFixed(2),v.rail.toFixed(2),v.pow,lid.visible,housing.visible].join();
+  if (pose!==lastPose){ lastPose=pose; needs3D=true; }
+  if (!needs3D) return;
+  slide.position.x=v.rail;
+  forkG.position.y=v.fork;
+  hornPivot.rotation.x=-v.horn*DEG;
+  togPivot.rotation.x=-v.tog*DEG;
+  servoMat.emissive.setHex(v.pow?0x3a0d10:0x000000);
+  renderer.render(scene,cam);
+  var w=vp.clientWidth, h=vp.clientHeight, p=new THREE.Vector3();
+  tagDefs.forEach(function(t){
+    t.obj.updateMatrixWorld();
+    if (t.local){ p.copy(t.off).applyMatrix4(t.obj.matrixWorld); } else { t.obj.getWorldPosition(p); p.add(t.off); }
+    p.project(cam);
+    var vis=p.z<1 && Math.abs(p.x)<1.05 && Math.abs(p.y)<1.05;
+    t.el.hidden=!vis; if (vis){ t.el.style.left=((p.x+1)/2*w)+'px'; t.el.style.top=((1-p.y)/2*h)+'px'; }
+  });
+  needs3D=false;
+}
+
+
+// ------------------------------------------------------------------ sounds: shape of each one + what the detector made of it
+var VERDICT = {
+  'clap 1':   { txt:'clap 1', cls:'clap' },
+  'clap 2':   { txt:'clap 2 · flipped', cls:'clap' },
+  'pending':  { txt:'deciding…', cls:'soft' },
+  'too long': { txt:'too long for a clap', cls:'bad' },
+  'extra':    { txt:'3rd sound, cancels', cls:'bad' },
+  'cancelled':{ txt:'cancelled', cls:'bad' },
+  'single':   { txt:'single clap', cls:'soft' },
+  'too soon': { txt:'too soon (echo)', cls:'soft' },
+  'ignored':  { txt:'ignored, waiting for quiet', cls:'soft' },
+  'merged':   { txt:'part of the sound before', cls:'soft' },
+  'gradual':  { txt:'rose too slowly', cls:'soft' },
+  'muted':    { txt:'muted while the servo moves', cls:'soft' }
+};
+function findSounds(rec, dsounds){
+  var out=[], n=rec.t.length, i=2, prevStart=null;
+  while (i<n){
+    if (rec.loud[i] > rec.trig[i]){
+      var s=i, peak=rec.loud[i], k;
+      for (k=i+1; k<n && rec.t[k]-rec.t[s]<2000; k++){ var L=rec.loud[k]; if (L>peak) peak=L; if (L < Math.max(rec.trig[k]*0.4, peak*cfg.CLAP_END)) break; }
+      var e=Math.min(k,n-1), last=out[out.length-1];
+      if (last && rec.t[s]-last.tEnd < 20){ last.tEnd=rec.t[e]; last.peak=Math.max(last.peak,peak); last.len=last.tEnd-last.t+CHUNK; i=e+1; continue; }
+      var before=Math.min(rec.loud[s-1],rec.loud[s-2]);
+      var snd={ t:rec.t[s], tEnd:rec.t[e], peak:peak, len:rec.t[e]-rec.t[s]+CHUNK, rise:rec.loud[s]/Math.max(1,before), gap:prevStart===null?null:rec.t[s]-prevStart, muted:rec.st[s]===6, trig:rec.trig[s] };
+      out.push(snd); prevStart=snd.t; i=e+1;
+    } else i++;
+  }
+  out.forEach(function(sd,idx){
+    sd.n=idx+1;
+    var d=null;
+    for (var q=0;q<dsounds.length;q++){ var x=dsounds[q]; if (x.t>=sd.t-10 && x.t<=sd.tEnd+5){ if (!d || (d.verdict==='merged' && x.verdict!=='merged')) d=x; } }
+    sd.verdict = d ? d.verdict : (sd.muted ? 'muted' : 'gradual');
+  });
+  return out;
+}
+var _computePlan=computePlan;
+computePlan=function(){ _computePlan(); if (app.plan) app.plan.sounds=findSounds(app.plan.rec, app.plan.det.sounds); };
+var _setClip=setClip;
+setClip=function(c){ app.clipSource = app.source==='preset' ? 'preset' : (app.source==='live' ? 'record' : app.source); _setClip(c); renderPresets(); };
+var rtSounds=[], rtSoundsAt=0;
+function currentSounds(){
+  var m=mode();
+  if (m==='plan') return app.plan ? app.plan.sounds : [];
+  if (!app.rt) return [];
+  var now=performance.now();
+  if (now-rtSoundsAt>250){ rtSoundsAt=now; rtSounds=findSounds(app.rt.rec, app.rt.det.sounds); }
+  return rtSounds;
+}
+function vcol(v, C){ var c=(VERDICT[v]||VERDICT.gradual).cls; return c==='clap'?C.acc:(c==='bad'?C.warn:C.faint); }
+
+// ------------------------------------------------------------------ timeline: shape of the sound + response
+var tl=$('timeline'), tctx=tl.getContext('2d'), tlW=0, tlH=300, dpr=1;
+function resizeTL(){ dpr=Math.min(window.devicePixelRatio||1,2); tlW=tl.clientWidth; tl.width=Math.round(tlW*dpr); tl.height=Math.round(tlH*dpr); }
+new ResizeObserver(function(){ resizeTL(); drawTimeline(); }).observe($('tlWrap'));
+var LANE={ wave:[12,60], loud:[72,206], state:[220,230], servo:[236,248], light:[254,266], axis:[278,294] };
+var ML=78, MR=10;
+function css(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function ly(v){ var y0=LANE.loud[0], y1=LANE.loud[1]; return y1-Math.sqrt(clamp(v,0,4095)/4095)*(y1-y0); }
+function pageInfo(){
+  var m=mode(), v=view(), start=Math.floor(Math.max(0,v.t)/PAGE)*PAGE, src;
+  if (m==='plan' && app.plan) src={ rec:app.plan.rec, ev:app.plan.ev, moves:app.plan.mot.moves, wave:app.clip?{mm:app.clip.mm,base:0}:null };
+  else if (app.rt) src={ rec:app.rt.rec, ev:app.rt.ev, moves:app.rt.mot.moves, wave: m==='live' ? app.rtWave : (app.clip && app.clipOverlayAt!==null ? { mm:app.clip.mm, base:Math.round(app.clipOverlayAt) } : null) };
+  else src={ rec:newRec(), ev:[], moves:[], wave:null };
+  return { start:start, head:v.t, src:src, m:m, sounds:currentSounds() };
+}
+function xOf(ms,start){ return ML+(ms-start)/PAGE*(tlW-ML-MR); }
+function drawTimeline(){
+  if (!tlW) return;
+  var c=tctx, pi=pageInfo(), start=pi.start, end=start+PAGE, s=pi.src, W=tlW;
+  var C={ ink:css('--ink'), soft:css('--ink-soft'), faint:css('--ink-faint'), line:css('--line'), acc:css('--accent'), accS:css('--accent-soft'), ok:css('--ok'), warn:css('--warn'), hit:css('--hit'), bg:css('--bg'), raised:css('--raised'), lamp:css('--lamp'), mono:css('--font-mono') };
+  c.setTransform(dpr,0,0,dpr,0,0); c.clearRect(0,0,W,tlH);
+  c.font='10.5px '+C.mono; c.textBaseline='middle';
+  [['wave','Sound'],['loud','Loudness'],['state','Detector'],['servo','Servo'],['light','Light']].forEach(function(L){
+    var y0=LANE[L[0]][0], y1=LANE[L[0]][1];
+    c.fillStyle=C.raised; c.fillRect(ML,y0,W-ML-MR,y1-y0);
+    c.fillStyle=C.soft; c.textAlign='left'; c.fillText(L[1].toUpperCase(),2,(y0+y1)/2);
+  });
+  // time grid
+  c.strokeStyle=C.line; c.lineWidth=1;
+  for (var g=0; g<=PAGE; g+=500){
+    var gx=Math.round(xOf(start+g,start))+0.5;
+    c.globalAlpha=g%1000===0?0.9:0.4; c.beginPath(); c.moveTo(gx,LANE.wave[0]); c.lineTo(gx,LANE.light[1]); c.stroke();
+    if (g%1000===0){ c.globalAlpha=1; c.fillStyle=C.soft; c.textAlign=g===0?'left':(g===PAGE?'right':'center'); c.fillText(((start+g)/1000).toFixed(0)+' s',gx,(LANE.axis[0]+LANE.axis[1])/2); }
+  }
+  c.globalAlpha=1;
+  c.textAlign='left';
+  [100,500,1000,2000,4095].forEach(function(v){ var y=Math.round(ly(v))+0.5; c.strokeStyle=C.line; c.globalAlpha=0.6; c.beginPath(); c.moveTo(ML,y); c.lineTo(W-MR,y); c.stroke(); c.globalAlpha=1; c.fillStyle=C.faint; c.fillText(String(v),ML+3,y-6); });
+  // waveform
+  if (s.wave && s.wave.mm){
+    var mm=s.wave.mm, base=s.wave.base, mid=(LANE.wave[0]+LANE.wave[1])/2, amp=(LANE.wave[1]-LANE.wave[0])/2-2, pxMs=PAGE/(W-ML-MR);
+    c.fillStyle=C.soft; c.globalAlpha=0.7;
+    for (var px=ML; px<W-MR; px++){
+      var m0=Math.floor(start+(px-ML)*pxMs-base), m1=Math.floor(start+(px+1-ML)*pxMs-base), lo=0, hi=0, any=false;
+      for (var q=Math.max(0,m0); q<Math.max(m0+1,m1) && q*2+1<mm.length; q++){ var a=mm[q*2], b=mm[q*2+1]; if(!any){lo=a;hi=b;any=true;} else { if(a<lo)lo=a; if(b>hi)hi=b; } }
+      if (any){ var ya=mid-hi*amp, yb=mid-lo*amp; c.fillRect(px,ya,1,Math.max(1,yb-ya)); }
+    }
+    c.globalAlpha=1;
+  } else {
+    c.fillStyle=C.faint; c.textAlign='center';
+    c.fillText(pi.m==='xiao'?'the XIAO sends loudness only; play a sound to the XIAO to see its waveform here':'press Play', (ML+W-MR)/2, (LANE.wave[0]+LANE.wave[1])/2);
+  }
+  var r=s.rec, n=r.t.length, i0=0; while (i0<n && r.t[i0]<start) i0++; var i1=i0; while (i1<n && r.t[i1]<end) i1++;
+  // shaded region for each sound (its "shape" window)
+  var snds=pi.sounds.filter(function(sd){ return sd.tEnd>=start && sd.t<end; });
+  snds.forEach(function(sd){ var x0=xOf(sd.t,start), x1=Math.max(x0+2,xOf(sd.tEnd+CHUNK,start)); c.fillStyle=vcol(sd.verdict,C); c.globalAlpha=0.14; c.fillRect(x0,LANE.wave[0],x1-x0,LANE.loud[1]-LANE.wave[0]); c.globalAlpha=1; });
+  if (i1>i0){
+    var by=LANE.loud[1], i;
+    c.beginPath(); c.moveTo(xOf(r.t[i0],start),by);
+    for (i=i0;i<i1;i++) c.lineTo(xOf(r.t[i],start),ly(r.loud[i]));
+    c.lineTo(xOf(r.t[i1-1],start),by); c.closePath(); c.fillStyle=C.accS; c.fill();
+    c.beginPath(); for (i=i0;i<i1;i++){ var lx=xOf(r.t[i],start), lyv=ly(r.loud[i]); if(i===i0) c.moveTo(lx,lyv); else c.lineTo(lx,lyv); } c.strokeStyle=C.acc; c.lineWidth=1.3; c.stroke();
+    c.setLineDash([2,3]); c.strokeStyle=C.faint; c.lineWidth=1.2; c.beginPath(); for (i=i0;i<i1;i++){ var nx=xOf(r.t[i],start), ny=ly(r.noise[i]); if(i===i0) c.moveTo(nx,ny); else c.lineTo(nx,ny); } c.stroke();
+    c.setLineDash([6,4]); c.strokeStyle=C.hit; c.beginPath(); for (i=i0;i<i1;i++){ var tx2=xOf(r.t[i],start), ty=ly(r.trig[i]); if(i===i0) c.moveTo(tx2,ty); else c.lineTo(tx2,ty); } c.stroke();
+    c.setLineDash([]);
+    c.fillStyle=C.hit; for (i=i0;i<i1;i++) if (r.loud[i]>=4095) c.fillRect(xOf(r.t[i],start)-1,LANE.loud[0]-3,3,3);
+    // detector state
+    var SC=[null,C.acc,C.accS,C.acc,C.ok,C.warn,C.faint];
+    for (i=i0;i<i1;i++){ var col=SC[r.st[i]]; if (!col) continue; var x=xOf(r.t[i],start); c.fillStyle=col; c.globalAlpha=r.st[i]===6?0.35:1; c.fillRect(x,LANE.state[0],Math.max(1,xOf(r.t[i]+CHUNK,start)-x+0.5),LANE.state[1]-LANE.state[0]); }
+    c.globalAlpha=1;
+    // servo powered + light
+    for (i=i0;i<i1;i++){
+      var xx=xOf(r.t[i],start), ww=Math.max(1,xOf(r.t[i]+CHUNK,start)-xx+0.5);
+      if (r.pow[i]){ c.fillStyle=C.hit; c.globalAlpha=0.55; c.fillRect(xx,LANE.servo[0],ww,LANE.servo[1]-LANE.servo[0]); c.globalAlpha=1; }
+      var lit=(r.tog[i]>=0)===params.upIsOn; c.fillStyle=lit?C.lamp:C.line; c.fillRect(xx,LANE.light[0],ww,LANE.light[1]-LANE.light[0]);
+    }
+  }
+  s.moves.forEach(function(mv){ if (mv.t1<start||mv.t0>=end) return; c.fillStyle=C.ink; c.textAlign='left'; c.fillText('push '+mv.dir, Math.max(ML+2,xOf(mv.t1,start)+5), (LANE.servo[0]+LANE.servo[1])/2); });
+  // light labels at changes
+  // number bubbles
+  snds.forEach(function(sd){
+    var bx=Math.max(ML+9,xOf(sd.t,start)+8), byy=Math.max(LANE.loud[0]+9, ly(sd.peak)-11);
+    c.fillStyle=vcol(sd.verdict,C); c.beginPath(); c.arc(bx,byy,8.5,0,7); c.fill();
+    c.fillStyle=C.bg; c.textAlign='center'; c.font='600 10.5px '+C.mono; c.fillText(String(sd.n),bx,byy+0.5); c.font='10.5px '+C.mono;
+  });
+  // double-clap markers
+  s.ev.forEach(function(E){
+    if (E.kind!=='double' || E.t<start || E.t>=end) return;
+    var ex=Math.round(xOf(E.t,start))+0.5;
+    c.strokeStyle=C.acc; c.lineWidth=2; c.beginPath(); c.moveTo(ex,LANE.wave[0]); c.lineTo(ex,LANE.light[1]); c.stroke();
+    c.font='600 10.5px '+C.mono; var lbl='DOUBLE CLAP → FLIP', tw=c.measureText(lbl).width, lx2=ex+tw+10>W-MR?ex-tw-8:ex+4;
+    c.fillStyle=C.acc; c.fillRect(lx2-2,LANE.wave[0]+1,tw+6,14); c.fillStyle=C.bg; c.textAlign='left'; c.fillText(lbl,lx2+1,LANE.wave[0]+8); c.font='10.5px '+C.mono;
+  });
+  // playhead
+  if (pi.head>=start && pi.head<end){
+    var phx=Math.round(xOf(pi.head,start))+0.5;
+    c.strokeStyle=C.ink; c.lineWidth=1.5; c.beginPath(); c.moveTo(phx,LANE.wave[0]-6); c.lineTo(phx,LANE.light[1]+2); c.stroke();
+    c.fillStyle=C.ink; c.beginPath(); c.moveTo(phx-5,LANE.wave[0]-8); c.lineTo(phx+5,LANE.wave[0]-8); c.lineTo(phx,LANE.wave[0]-2); c.closePath(); c.fill();
+  }
+  $('tlTitle').textContent='Sound shape and response · '+(start/1000).toFixed(0)+'–'+(end/1000).toFixed(0)+' s';
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"]/g,function(ch){ return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[ch]; }); }
+var tip=$('tlTip');
+function tlTime(e){ var rct=tl.getBoundingClientRect(), x=e.clientX-rct.left; return { x:x, y:e.clientY-rct.top, ms:pageInfo().start+(x-ML)/(tlW-ML-MR)*PAGE }; }
+tl.addEventListener('pointermove',function(e){
+  var p=tlTime(e), pi=pageInfo(), r=pi.src.rec;
+  if (p.x<ML || !r.t.length){ tip.hidden=true; return; }
+  var lo=0, hi=r.t.length-1; while(lo<hi){ var md=(lo+hi)>>1; if (r.t[md]<p.ms) lo=md+1; else hi=md; }
+  if (Math.abs(r.t[lo]-p.ms)>40){ tip.hidden=true; return; }
+  var sd=pi.sounds.filter(function(x){ return p.ms>=x.t-10 && p.ms<=x.tEnd+15; })[0];
+  tip.innerHTML=(r.t[lo]/1000).toFixed(3)+' s · loudness '+r.loud[lo]+' · trigger '+Math.round(r.trig[lo])+'<br>'+STATE_NAMES[r.st[lo]]+(sd?'<br>sound '+sd.n+': '+escapeHtml((VERDICT[sd.verdict]||VERDICT.gradual).txt):'');
+  tip.style.left=clamp(p.x,110,tlW-110)+'px'; tip.style.top=p.y+'px'; tip.hidden=false;
+  if (e.buttons===1 && mode()==='plan') seek(p.ms);
+});
+tl.addEventListener('pointerleave',function(){ tip.hidden=true; });
+tl.addEventListener('pointerdown',function(e){ if (mode()!=='plan'||!app.plan) return; tl.setPointerCapture(e.pointerId); seek(tlTime(e).ms); });
+
+// ------------------------------------------------------------------ sounds table + result
+var lastTableKey='';
+function fmtMs(ms){ return ms===null?'–':(ms>=1000?(ms/1000).toFixed(2)+' s':Math.round(ms)+' ms'); }
+function renderSounds(){
+  var list=currentSounds(), m=mode(), head=view().t;
+  var key=list.length+'|'+list.map(function(s){ return s.t+s.verdict; }).join(',')+'|'+(m==='plan'?Math.floor(head/100):'');
+  if (key===lastTableKey) return; lastTableKey=key;
+  var C={ acc:css('--accent'), warn:css('--warn'), faint:css('--ink-faint') };
+  $('sndCount').textContent=list.length+(list.length===1?' sound':' sounds');
+  if (!list.length){ $('soundsBody').innerHTML='<tr class="empty"><td colspan="7">'+(m==='plan'?'Nothing went above the clap trigger level in this sound.':'Nothing above the trigger level yet.')+'</td></tr>'; return; }
+  var cur=null; if (m==='plan') list.forEach(function(s){ if (s.t<=head) cur=s; });
+  $('soundsBody').innerHTML=list.map(function(s){
+    var V=VERDICT[s.verdict]||VERDICT.gradual, fut=m==='plan' && s.t>head;
+    var longBad=s.verdict==='too long', riseBad=s.verdict==='gradual', gapBad=s.verdict==='too soon';
+    return '<tr data-t="'+s.t+'" class="'+(fut?'future':'')+(s===cur?' now':'')+'">'+
+      '<td><span class="num" style="background:'+vcol(s.verdict,C)+'">'+s.n+'</span></td>'+
+      '<td>'+(s.t/1000).toFixed(2)+' s</td>'+
+      '<td'+(s.peak>=4095?' class="bad" title="clipped"':'')+'>'+s.peak+'</td>'+
+      '<td'+(riseBad?' class="bad"':'')+'>×'+(s.rise>=10?Math.round(s.rise):s.rise.toFixed(1))+'</td>'+
+      '<td'+(longBad?' class="bad"':'')+'>'+fmtMs(s.len)+'</td>'+
+      '<td'+(gapBad?' class="bad"':'')+'>'+fmtMs(s.gap)+'</td>'+
+      '<td>'+pillHtml(V.cls==='clap'?'flip':(V.cls==='bad'?'warn':'quiet'), V.txt)+'</td></tr>';
+  }).join('');
+  $('soundsBody').querySelectorAll('tr[data-t]').forEach(function(tr){ tr.addEventListener('click',function(){ if (mode()==='plan') seek(Math.max(0,+tr.dataset.t-250)); }); });
+}
+function pillHtml(cls,txt){ return '<span class="pill '+cls+'">'+txt+'</span>'; }
+function explainNoFlip(list, peak){
+  var pr=['extra','too long','cancelled','single','gradual','too soon','ignored','merged','muted','pending'], best=null;
+  pr.some(function(v){ best=list.filter(function(s){ return s.verdict===v; })[0]; return !!best; });
+  if (!best) return 'Nothing got louder than the clap trigger ('+cfg.ABS_MIN+' or '+cfg.RATIO+'× the background). The loudest moment was '+peak+'.';
+  var n='Sound '+best.n;
+  switch(best.verdict){
+    case 'extra': return n+' came within '+cfg.QUIET_AFTER_MS+' ms of clap 2, so it counted as three claps and cancelled.';
+    case 'too long': return n+' stayed loud for '+fmtMs(best.len)+'. A clap has to fade to a fifth of its peak within '+cfg.MAX_CLAP_MS+' ms.';
+    case 'cancelled': return n+' started a double clap that the next sound cancelled.';
+    case 'single': return n+' was a single clap: no second clap started within '+cfg.MAX_GAP_MS+' ms.';
+    case 'gradual': return n+' got loud too slowly. A clap has to more than double in 5–10 ms (it rose ×'+best.rise.toFixed(1)+').';
+    case 'too soon': return n+' started less than '+cfg.MIN_GAP_MS+' ms after the sound before, so it counted as an echo.';
+    case 'muted': return n+' happened while the mic was muted for a servo move.';
+    case 'pending': return n+' is still being judged.';
+    default: return n+' was ignored while the detector waited for quiet.';
+  }
+}
+function updateResult(v){
+  var m=mode(), ev, rec;
+  if (m==='plan' && app.plan){ ev=app.plan.ev; rec=app.plan.rec; }
+  else if (app.rt){ ev=app.rt.ev; rec=app.rt.rec; }
+  else { ev=[]; rec=newRec(); }
+  var list=currentSounds(), doubles=ev.filter(function(e){ return e.kind==='double'; }), refused=ev.filter(function(e){ return e.kind==='refused'; });
+  var peak=0; for (var i=0;i<rec.loud.length;i++) if (rec.loud[i]>peak) peak=rec.loud[i];
+  var box=$('result'), out, why, cls;
+  function pair(dt){ var a=list.filter(function(s){ return s.verdict==='clap 1' && s.t<dt; }).pop(), b=list.filter(function(s){ return s.verdict==='clap 2' && s.t<dt; }).pop(); return [a,b]; }
+  if (doubles.length){
+    var last=doubles[doubles.length-1], ab=pair(last.t), mv=(m==='plan'?app.plan.mot.moves:app.rt.mot.moves).filter(function(x){ return x.t0>=last.t-5; })[0];
+    var finalUp = m==='plan' ? app.plan.rec.tog[app.plan.rec.tog.length-1]>=0 : v.up, finalLit=finalUp===params.upIsOn;
+    out = (doubles.length>1 ? 'Double clap ×'+doubles.length+' → light ends ' : 'Double clap → light turned ')+(finalLit?'ON':'OFF');
+    why = (ab[0]&&ab[1] ? 'Sounds '+ab[0].n+' and '+ab[1].n+' were sharp, short and '+fmtMs(ab[1].t-ab[0].t)+' apart, then it went quiet. ' : '')+
+          'Confirmed at '+(last.t/1000).toFixed(2)+' s'+(mv?'; the servo pushed the toggle '+mv.dir+'.':'.')+(refused.length?' '+refused[0].text+'.':'');
+    cls='good';
+  } else if (refused.length){ out='Move refused'; why=refused[0].text+'.'; cls='bad'; }
+  else if ((m==='plan'?app.plan.mot.moves:(app.rt?app.rt.mot.moves:[])).length){ out='Moved by hand input'; why='No double clap; the switch moved because of Flip now or Flip by hand.'; cls='good'; }
+  else if (m==='plan'){ out='No flip'; why=explainNoFlip(list,peak); cls=list.length?'bad':'idle'; }
+  else if (m==='xiao' && !xiao.hello){ out=xiao.connected?'Waiting for the XIAO':'XIAO not connected'; why='Open “Run on the real XIAO” below.'; cls='idle'; }
+  else { out='Listening'+(m==='xiao'?' on the XIAO':''); why=list.length?explainNoFlip(list.slice(-1),peak):'Clap twice about half a second apart.'; cls='idle'; }
+  $('rOut').textContent=out; $('rWhy').textContent=why; box.className='result '+cls;
+  var lamp=$('rLamp'); lamp.classList.toggle('lit',v.light); $('rLampTxt').textContent='Light '+(v.light?'ON':'OFF');
+  $('hServo').textContent = v.pow ? ('Servo '+v.servoDeg+'° · powered') : 'Servo parked · power off';
+  $('hToggle').textContent = 'Toggle '+(v.up?'UP':'DOWN');
+  $('rules').textContent='A clap must reach the trigger, more than double within 10 ms, and fade to a fifth of its peak within '+cfg.MAX_CLAP_MS+' ms. Clap 2 must start '+cfg.MIN_GAP_MS+'–'+cfg.MAX_GAP_MS+' ms after clap 1, followed by '+cfg.QUIET_AFTER_MS+' ms of quiet. Red cells broke a rule.';
+}
+
+// ------------------------------------------------------------------ status, presets, live buttons
+var statusTimer=null;
+function logNote(text){ var el=$('status'); el.textContent=text; clearTimeout(statusTimer); statusTimer=setTimeout(function(){ el.textContent=envText; },9000); }
+function clearLogEl(){}
+function renderPresets(){
+  var sel=$('presetSel'), html='';
+  if (app.clip && app.clipSource && app.clipSource!=='preset') html+='<option value="custom" selected>Your sound: '+escapeHtml(app.clip.name)+'</option>';
+  html+='<optgroup label="Test sounds">'+PRESETS.map(function(p){
+    var o=p.outcome, tag=o===undefined?'':(o>0?(o>1?'  ·  flips ×'+o:'  ·  flips'):'  ·  ignored');
+    return '<option value="'+p.id+'"'+((app.clipSource==='preset'||!app.clipSource)&&app.presetId===p.id?' selected':'')+'>'+escapeHtml(p.name+tag)+'</option>';
+  }).join('')+'</optgroup>';
+  sel.innerHTML=html;
+}
+var outcomeTimer=null;
+function presetOutcomes(){
+  clearTimeout(outcomeTimer);
+  outcomeTimer=setTimeout(function(){
+    PRESETS.forEach(function(p){ if (!presetCache[p.id]) presetCache[p.id]=p.make(rng(7+p.id.length*31+p.id.charCodeAt(0))); p.outcome=outcomeFor(loudness(presetCache[p.id],SR)); });
+    renderPresets();
+  },120);
+}
+function syncLiveButtons(){
+  var L=app.live, lb=$('liveBtn'), rb=$('recBtn');
+  lb.textContent = L && !L.recording ? 'Stop live mic' : 'Live mic'; lb.classList.toggle('on', !!(L && !L.recording));
+  rb.textContent = L && L.recording ? 'Recording…' : 'Record 6 s'; rb.classList.toggle('on', !!(L && L.recording));
+  rb.disabled = !!(L && L.recording);
+  $('recMeter').parentNode.classList.toggle('on', !!(L && L.recording));
+  lb.title = rb.title = micOK ? '' : 'The microphone is blocked in the claude.ai viewer. Open the page from your computer.';
+}
+function setEngine(e){
+  if (app.engine===e){ syncUI(); return; }
+  stopPlayback(); stopLive();
+  app.engine=e;
+  if (e==='xiao'){ app.clipOverlayAt=null; }
+  else { app.rt=null; if (app.source==='live') app.source=app.clipSource||'preset'; computePlan(); }
+  syncUI(); refreshAll();
+}
+function syncUI(){
+  var rc=$('runChip'), m=mode();
+  rc.textContent = m==='xiao' ? 'XIAO over USB' : (m==='live' ? 'live mic' : 'simulation'); rc.className='chip '+(m==='plan'?'sim':'live');
+  $('cfgSend').hidden = app.engine!=='xiao';
+  $('mHand').disabled = app.engine==='xiao';
+  $('liveBtn').disabled = app.engine==='xiao';
+  var changed=Object.keys(CFG_FMT).some(function(k){ return cfg[k]!==DEFAULTS[k]; }) || params.gain!==1 || params.adc!=='xiao';
+  $('tuneChip').textContent = changed ? 'changed' : 'firmware defaults'; $('tuneChip').className='chip'+(changed?' sim':'');
+  syncPlay(); syncLiveButtons(); xiaoChip();
+}
+
+// ------------------------------------------------------------------ controls
+$('presetSel').addEventListener('change',function(){ if (this.value==='custom') return; app.source='preset'; app.clipSource='preset'; if (app.live) stopLive(); loadPreset(this.value); syncUI(); });
+var fi=$('fileIn');
+$('upBtn').addEventListener('click',function(){ fi.click(); });
+fi.addEventListener('change',function(){ if (fi.files[0]){ if (app.live) stopLive(); app.source='upload'; decodeFile(fi.files[0]); } fi.value=''; });
+var veil=$('dropveil'), dragDepth=0;
+window.addEventListener('dragenter',function(e){ if (e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types,'Files')>=0){ dragDepth++; veil.hidden=false; } });
+window.addEventListener('dragleave',function(){ dragDepth=Math.max(0,dragDepth-1); if (!dragDepth) veil.hidden=true; });
+window.addEventListener('dragover',function(e){ e.preventDefault(); });
+window.addEventListener('drop',function(e){ e.preventDefault(); dragDepth=0; veil.hidden=true; var f=e.dataTransfer.files[0]; if (f){ if (app.live) stopLive(); app.source='upload'; decodeFile(f); } });
+$('recBtn').addEventListener('click',function(){ if (!micOK){ logNote('The microphone is blocked in the claude.ai viewer. Open the page from your computer in Chrome to record.'); return; } startMic(6000); });
+$('liveBtn').addEventListener('click',function(){
+  if (app.live && !app.live.recording){ stopLive(); app.source=app.clipSource||'preset'; syncUI(); refreshAll(); return; }
+  if (!micOK){ logNote('The microphone is blocked in the claude.ai viewer. Open the page from your computer in Chrome to listen live.'); return; }
+  startMic(0);
+});
+$('playBtn').addEventListener('click',function(){ var c=getCtx(); if (c && c.state==='suspended') c.resume(); if (app.playing) stopPlayback(); else play(); });
+$('restartBtn').addEventListener('click',function(){ app.injections=[]; computePlan(); stopPlayback(); app.playMs=0; play(); refreshAll(); });
+$('playOut').addEventListener('change',function(){ params.playOut=this.checked; if (app.playing && mode()==='plan'){ stopAudio(); app.playStartHead=app.playMs; app.usingCtx=startAudio(app.playMs); if (app.usingCtx) app.playStartCtx=actx.currentTime; app.playStartPerf=performance.now(); } });
+$('mFlip').addEventListener('click',function(){ manual({ type:'flip' }); });
+$('mHand').addEventListener('click',function(){ manual({ type:'hand' }); });
+
+function bindRange(id, fmt, apply, live){
+  var el=$(id), out=$(id+'Val');
+  function upd(fire){ var v=parseFloat(el.value); apply(v); if (out) out.textContent=fmt(v); if (fire) live(v); }
+  el.addEventListener('input',function(){ upd(true); }); upd(false);
+}
+var settingsTimer=null;
+function settingsChanged(){ clearTimeout(settingsTimer); settingsTimer=setTimeout(function(){ if (mode()==='plan') computePlan(); presetOutcomes(); lastTableKey=''; syncUI(); refreshAll(); },60); if (app.engine==='xiao') $('cfgSend').classList.add('primary'); }
+var CFG_FMT={ ABS_MIN:function(v){ return String(v); }, RATIO:function(v){ return '×'+v.toFixed(1); }, MAX_CLAP_MS:function(v){ return v+' ms'; }, MIN_GAP_MS:function(v){ return v+' ms'; }, MAX_GAP_MS:function(v){ return v+' ms'; }, QUIET_AFTER_MS:function(v){ return v+' ms'; } };
+Object.keys(CFG_FMT).forEach(function(k){ $('c'+k).value=cfg[k]; bindRange('c'+k, CFG_FMT[k], function(v){ cfg[k]=v; }, settingsChanged); });
+$('cfgReset').addEventListener('click',function(){
+  Object.keys(CFG_FMT).forEach(function(k){ cfg[k]=DEFAULTS[k]; $('c'+k).value=DEFAULTS[k]; $('c'+k+'Val').textContent=CFG_FMT[k](DEFAULTS[k]); });
+  params.gain=1; $('gain').value=0; $('gainVal').textContent='×1.00'; params.adc='xiao'; $('adc').value='xiao';
+  reanalyse(); settingsChanged();
+});
+$('cfgSend').addEventListener('click',function(){ Object.keys(CFG_FMT).forEach(function(k){ xiaoSend('set '+k+' '+cfg[k]); }); this.classList.remove('primary'); logNote('Detector settings sent to the XIAO.'); });
+bindRange('gain', function(v){ return '×'+Math.pow(2,v).toFixed(2); }, function(v){ params.gain=Math.pow(2,v); }, function(){ clearTimeout(settingsTimer); settingsTimer=setTimeout(function(){ reanalyse(); lastTableKey=''; syncUI(); },80); });
+$('adc').addEventListener('change',function(){ params.adc=this.value; reanalyse(); lastTableKey=''; syncUI(); });
+$('mUpOn').addEventListener('change',function(){ params.upIsOn=this.checked; if (app.engine==='xiao') xiaoSend('set UP_IS_ON '+(this.checked?1:0)); refreshAll(); });
+$('xConnect').addEventListener('click',xiaoConnect);
+$('xReset').addEventListener('click',function(){ if (xiao.writer){ xiao.writer.write('\x03\x04').catch(function(){}); logNote('Sent Ctrl-C, Ctrl-D: the board restarts main.py.'); } });
+$('vIso').addEventListener('click',function(){ setView('iso'); });
+$('vSide').addEventListener('click',function(){ setView('side'); });
+$('vFront').addEventListener('click',function(){ setView('front'); });
+var scriptText=$('benchScript').textContent.replace(/^\n/,'');
+$('scriptPre').textContent=scriptText;
+$('xScript').addEventListener('click',function(){ var d=$('scriptDlg'); if (d.showModal) d.showModal(); else d.setAttribute('open',''); });
+$('scriptClose').addEventListener('click',function(){ var d=$('scriptDlg'); if (d.close) d.close(); else d.removeAttribute('open'); });
+$('scriptCopy').addEventListener('click',function(){
+  var b=this;
+  function selectScript(){ var rg=document.createRange(); rg.selectNodeContents($('scriptPre')); var s=window.getSelection(); s.removeAllRanges(); s.addRange(rg); b.textContent='Selected, press Cmd/Ctrl-C'; }
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(scriptText).then(function(){ b.textContent='Copied'; setTimeout(function(){ b.textContent='Copy to clipboard'; },1500); }).catch(selectScript);
+  else selectScript();
+});
+var envText = (micOK && serialOK) ? '' : (inFrame ? 'Live mic, recording and the XIAO need this page opened from your computer.' : (!micOK ? 'This browser blocks the microphone.' : 'This browser has no USB serial; use Chrome or Edge for the XIAO.'));
+$('status').textContent=envText;
+
+// ------------------------------------------------------------------ main loop
+var uiTimer=0, lastFrame=0;
+function refreshAll(){ var v=view(); updateResult(v); renderSounds(); drawTimeline(); render3D(v); }
+function frame(ts){
+  var dt=ts-lastFrame; lastFrame=ts;
+  tickPlayback();
+  if (mode()==='xiao' && app.rt){ app.rt.mot.advance(rtNow()); app.rt.curT=rtNow(); }
+  if (app.engine==='xiao' && !xiao.connected) setEngine('sim');
+  var v=view();
+  render3D(v);
+  var active = app.playing || mode()!=='plan';
+  if (active) drawTimeline();
+  uiTimer+=dt;
+  if (uiTimer>120){ uiTimer=0; if (active){ updateResult(v); renderSounds(); } }
+  requestAnimationFrame(frame);
+}
+window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').addEventListener && window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){ lastTableKey=''; refreshAll(); });
+new MutationObserver(function(){ lastTableKey=''; refreshAll(); }).observe(document.documentElement,{ attributes:true, attributeFilter:['data-theme'] });
+
+resize3D(); resizeTL(); setView('iso');
+app.clipSource='preset';
+loadPreset('double');
+presetOutcomes();
+syncUI(); refreshAll();
+requestAnimationFrame(frame);
+window.__bench = { app:app, cfg:cfg, PRESETS:PRESETS, currentSounds:currentSounds };
+})();
+</script>
+</body>
+</html>
